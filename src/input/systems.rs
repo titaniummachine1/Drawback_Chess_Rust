@@ -26,7 +26,7 @@ pub fn handle_piece_selection(
     game_state: Res<GameState>,
     mut ev_make_move: EventWriter<MakeMoveEvent>,
     selected: Query<Entity, With<SelectedPiece>>,
-    valid_moves: Query<Entity, With<ValidMoveDestination>>,
+    valid_moves: Query<(Entity, &ValidMoveDestination)>,
 ) {
     // Only process clicks when it's the player's turn
     if !mouse_button.just_pressed(MouseButton::Left) {
@@ -39,7 +39,9 @@ pub fn handle_piece_selection(
     
     // Get the cursor position in world coordinates
     if let Some(cursor_position) = window.cursor_position() {
+        println!("Mouse clicked at screen position: {:?}", cursor_position);
         let cursor_world_position = cursor_to_world_position(cursor_position, window, camera, camera_transform);
+        println!("World position: {:?}", cursor_world_position);
         
         // Check if a square was clicked
         let mut clicked_square: Option<Square> = None;
@@ -53,6 +55,7 @@ pub fn handle_piece_selection(
                 && cursor_world_position.y >= square_pos.y - half_size
                 && cursor_world_position.y <= square_pos.y + half_size {
                 clicked_square = Some(board_square.square);
+                println!("Clicked on square: {:?}", board_square.square);
                 break;
             }
         }
@@ -61,23 +64,22 @@ pub fn handle_piece_selection(
             // If there's a piece selected, check if this is a valid move
             if !selected.is_empty() {
                 // Check if the click is on a valid move destination
-                for entity in valid_moves.iter() {
-                    if let Ok(valid_move) = valid_moves.get_component::<ValidMoveDestination>(entity) {
-                        if valid_move.chess_move.to() == square {
-                            // Valid move selected - send event to make the move
-                            ev_make_move.send(MakeMoveEvent(valid_move.chess_move.clone()));
-                            
-                            // Clear selection and valid moves
-                            for entity in selected.iter() {
-                                commands.entity(entity).remove::<SelectedPiece>();
-                            }
-                            
-                            for entity in valid_moves.iter() {
-                                commands.entity(entity).despawn();
-                            }
-                            
-                            return;
+                for (entity, valid_move) in valid_moves.iter() {
+                    if valid_move.chess_move.to() == square {
+                        // Valid move selected - send event to make the move
+                        println!("Making move: {:?}", valid_move.chess_move);
+                        ev_make_move.send(MakeMoveEvent(valid_move.chess_move.clone()));
+                        
+                        // Clear selection and valid moves
+                        for entity in selected.iter() {
+                            commands.entity(entity).remove::<SelectedPiece>();
                         }
+                        
+                        for (entity, _) in valid_moves.iter() {
+                            commands.entity(entity).despawn();
+                        }
+                        
+                        return;
                     }
                 }
             }
@@ -86,12 +88,14 @@ pub fn handle_piece_selection(
             let mut clicked_on_piece = false;
             for (entity, piece, _) in pieces.iter() {
                 if piece.pos == square && piece.color == game_state.current_player_turn {
+                    println!("Selected piece: {:?} {:?} at {:?}", piece.color, piece.role, piece.pos);
+                    
                     // Clear previous selection and valid moves
                     for entity in selected.iter() {
                         commands.entity(entity).remove::<SelectedPiece>();
                     }
                     
-                    for entity in valid_moves.iter() {
+                    for (entity, _) in valid_moves.iter() {
                         commands.entity(entity).despawn();
                     }
                     
@@ -109,10 +113,10 @@ pub fn handle_piece_selection(
                             },
                             transform: Transform::from_translation(
                                 Vec3::new(
-                                    (piece.pos.file().char() as u8 - b'a') as f32 - 3.5,
-                                    (piece.pos.rank().char() as u8 - b'1') as f32 - 3.5,
-                                    0.0,
-                                ) * TILE_SIZE
+                                    ((piece.pos.file().char() as u8 - b'a') as f32 - 3.5) * TILE_SIZE,
+                                    ((piece.pos.rank().char() as u8 - b'1') as f32 - 3.5) * TILE_SIZE,
+                                    -0.1, // Place slightly below pieces for correct layering
+                                )
                             ),
                             ..default()
                         },
@@ -135,15 +139,18 @@ pub fn handle_piece_selection(
             
             // If clicked on empty square or opponent's piece and nothing is selected, do nothing
             if !clicked_on_piece {
+                println!("No friendly piece at square or clicked on empty square");
                 // If clicking on empty square without a selected piece, clear selection
                 for entity in selected.iter() {
                     commands.entity(entity).remove::<SelectedPiece>();
                 }
                 
-                for entity in valid_moves.iter() {
+                for (entity, _) in valid_moves.iter() {
                     commands.entity(entity).despawn();
                 }
             }
+        } else {
+            println!("Click didn't land on any chess board square");
         }
     }
 }
@@ -155,15 +162,20 @@ fn cursor_to_world_position(
     camera: &Camera,
     camera_transform: &GlobalTransform,
 ) -> Vec2 {
+    // Get the size of the window
     let window_size = Vec2::new(window.width(), window.height());
+    
+    // Convert cursor position to normalized device coordinates (NDC)
+    // NDC range from -1 to 1, with (0,0) at the center
     let ndc = (cursor_pos / window_size) * 2.0 - Vec2::ONE;
     
     // Convert to world coordinates
     if let Some(matrix) = camera.viewport_to_world(camera_transform, ndc) {
-        return matrix.origin.truncate();
+        matrix.origin.truncate()
+    } else {
+        println!("Failed to convert cursor position to world coordinates");
+        Vec2::ZERO // Fallback
     }
-    
-    Vec2::ZERO // Fallback
 }
 
 // Helper function to display valid moves for a selected piece
@@ -171,16 +183,20 @@ fn display_valid_moves(
     commands: &mut Commands,
     game_state: &GameState,
     from_square: Square,
-    color: ChessColor,
-    role: Role,
+    _color: ChessColor,
+    _role: Role,
     board_squares: &Query<(&Transform, &BoardSquare)>,
 ) {
     let legals = game_state.board.legal_moves();
+    println!("Found {} legal moves in total", legals.len());
     
     // Filter moves to only those from the selected piece
+    let mut valid_move_count = 0;
     for chess_move in legals {
         if chess_move.from() == Some(from_square) {
+            valid_move_count += 1;
             let to_square = chess_move.to();
+            println!("Valid move: {:?} to {:?}", from_square, to_square);
             
             // Find the board square entity for the destination
             for (transform, board_square) in board_squares.iter() {
@@ -194,7 +210,11 @@ fn display_valid_moves(
                                 ..default()
                             },
                             transform: Transform::from_translation(
-                                transform.translation
+                                Vec3::new(
+                                    transform.translation.x,
+                                    transform.translation.y,
+                                    -0.05, // Place slightly below pieces but above selection highlight
+                                )
                             ),
                             ..default()
                         },
@@ -206,4 +226,5 @@ fn display_valid_moves(
             }
         }
     }
+    println!("Displaying {} valid moves for selected piece", valid_move_count);
 }

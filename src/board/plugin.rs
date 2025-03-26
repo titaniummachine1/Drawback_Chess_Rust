@@ -17,17 +17,42 @@ fn setup_board(mut commands: Commands) {
     // Create board squares
     for y in 0..8 {
         for x in 0..8 {
+            // In chess, traditionally white squares are at coordinates where x+y is even
             let is_white = (x + y) % 2 == 0;
             let position = Vec3::new(
                 (x as f32 - 3.5) * TILE_SIZE,
-                (y as f32 - 3.5) * TILE_SIZE,
-                0.0,
+                ((7 - y) as f32 - 3.5) * TILE_SIZE, // Flip the y-coordinate to match chess board orientation
+                -0.2, // Below the pieces
             );
             
             // Convert x,y coordinates to shakmaty File/Rank
-            // Note: In shakmaty, Rank 1 is at the bottom (y=0), File A is on the left (x=0)
-            let file = File::from_index(x).expect("Invalid file index");
-            let rank = Rank::from_index(y).expect("Invalid rank index");
+            // In shakmaty, File A is on the left (x=0), Rank 1 is at the bottom (y=0)
+            let file = match x {
+                0 => File::A,
+                1 => File::B,
+                2 => File::C,
+                3 => File::D,
+                4 => File::E,
+                5 => File::F,
+                6 => File::G,
+                7 => File::H,
+                _ => panic!("Invalid file index"),
+            };
+            
+            // When we draw the board, we flip the y-coordinate, so we need to map
+            // y=0 (top row in our drawing) to Rank::Eighth
+            // y=7 (bottom row in our drawing) to Rank::First
+            let rank = match y {
+                0 => Rank::Eighth,
+                1 => Rank::Seventh,
+                2 => Rank::Sixth,
+                3 => Rank::Fifth,
+                4 => Rank::Fourth,
+                5 => Rank::Third,
+                6 => Rank::Second,
+                7 => Rank::First,
+                _ => panic!("Invalid rank index"),
+            };
             
             // Create the shakmaty Square
             let square = Square::from_coords(file, rank);

@@ -17,4 +17,9 @@
 *.pdb
 
 # Assets folder until there are actual assets
-/assets/ 
+/assets/
+
+# Specific unwanted files
+ersTerminatort8000AppDataLocalRust*
+*cargo build*
+"ersTerminatort8000AppDataLocalRust Projects*" 

@@ -9,6 +9,7 @@ mod input;
 mod ai;
 mod ui;
 mod drawbacks; // Import the drawbacks module
+// The images directory contains assets, not Rust code, so no need to import it as a module
 
 // Use module plugins
 use game_logic::plugin::GameLogicPlugin;
