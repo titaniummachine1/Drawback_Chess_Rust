@@ -1,0 +1,117 @@
+use bevy::prelude::*;
+use bevy::tasks::AsyncComputeTaskPool;
+use futures_lite::future;
+use shakmaty::{Chess, Color as ChessColor};
+use crate::game_logic::state::{GameState, TurnState};
+use crate::game_logic::events::MakeMoveEvent;
+use crate::drawbacks::{DrawbackRegistry, DrawbackId};
+use super::components::AiThinking;
+use super::mcts::find_best_move_mcts;
+
+pub struct AiPlugin;
+
+impl Plugin for AiPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update,
+            (
+                request_ai_move.run_if(in_state(TurnState::AiTurn)),
+                check_ai_move_result.run_if(in_state(TurnState::AiTurn)),
+            )
+        );
+    }
+}
+
+/// Represents the state of the AI's game analysis.
+#[derive(Clone)]
+pub struct AiGameStateContext {
+    pub board: Chess,
+    pub player_turn: ChessColor,
+    pub player_drawback: DrawbackId,
+    pub opponent_drawback: DrawbackId,
+    pub current_hash: u64,
+    pub depth: u8, // Search depth limit
+}
+
+impl AiGameStateContext {
+    pub fn from_game_state(game_state: &GameState) -> Self {
+        Self {
+            board: game_state.board.clone(),
+            player_turn: game_state.current_player_turn,
+            player_drawback: game_state.get_current_player_drawback_id(),
+            opponent_drawback: match game_state.current_player_turn {
+                ChessColor::White => game_state.black_drawback,
+                ChessColor::Black => game_state.white_drawback,
+            },
+            current_hash: game_state.zobrist_hash,
+            depth: 3, // Default search depth
+        }
+    }
+}
+
+/// System to spawn the AI calculation task
+fn request_ai_move(
+    mut commands: Commands,
+    game_state: Res<GameState>,
+    drawback_registry: Res<DrawbackRegistry>,
+    q_ai_task: Query<&AiThinking>,
+) {
+    if q_ai_task.is_empty() {
+        println!("AI turn detected. Spawning calculation task...");
+
+        let thread_pool = AsyncComputeTaskPool::get();
+
+        // Determine current player and opponent drawback IDs
+        let (player_id, opponent_id) = match game_state.current_player_turn {
+             ChessColor::White => (game_state.white_drawback, game_state.black_drawback),
+             ChessColor::Black => (game_state.black_drawback, game_state.white_drawback),
+        };
+
+        // Create DrawbackRule instances if needed for the current game state
+        // This helps the AI consider the effects of both players' drawbacks
+        let _player_drawback_arc = if player_id != DrawbackId::None {
+            Some(drawback_registry.rules.get(&player_id).cloned())
+        } else {
+            None
+        };
+
+        let _opponent_drawback_arc = if opponent_id != DrawbackId::None {
+            Some(drawback_registry.rules.get(&opponent_id).cloned())
+        } else {
+            None
+        };
+
+        // Prepare data for the async task
+        let ai_context = AiGameStateContext::from_game_state(&game_state);
+
+        // Spawn the Async Task
+        let task = thread_pool.spawn(async move {
+            let iterations = 1000; // Example MCTS iterations
+            find_best_move_mcts(ai_context, iterations)
+        });
+
+        commands.spawn(AiThinking(task));
+        println!("AI calculation task spawned.");
+    }
+}
+
+/// System to check the AiThinking task result
+fn check_ai_move_result(
+    mut commands: Commands,
+    mut task_q: Query<(Entity, &mut AiThinking)>,
+    mut ev_make_move: EventWriter<MakeMoveEvent>,
+) {
+    for (entity, mut ai_task) in task_q.iter_mut() {
+        if let Some(result_move) = future::block_on(future::poll_once(&mut ai_task.0)) {
+            println!("AI calculation task finished.");
+            if let Some(ai_move) = result_move {
+                 println!("AI requests move: {:?}", ai_move);
+                 ev_make_move.send(MakeMoveEvent(ai_move));
+            } else {
+                 eprintln!("AI task finished but returned no move. Game state might be terminal.");
+            }
+            commands.entity(entity).despawn_recursive();
+            println!("Despawned AI task entity.");
+            break;
+        }
+    }
+} 
