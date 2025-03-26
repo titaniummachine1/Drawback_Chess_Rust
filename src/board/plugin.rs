@@ -30,7 +30,9 @@ fn setup_board(mut commands: Commands) {
             );
             
             // Convert x,y coordinates to shakmaty File/Rank
-            // In shakmaty, File A is on the left (x=0), Rank 1 is at the bottom (y=7 in our grid)
+            // With flipped board, File A is still on the left (x=0), but now:
+            // y=0 (top row in our drawing) -> Rank::First (White's pieces with flipped board) 
+            // y=7 (bottom row in our drawing) -> Rank::Eighth (Black's pieces with flipped board)
             let file = match x {
                 0 => File::A,
                 1 => File::B,
@@ -43,18 +45,17 @@ fn setup_board(mut commands: Commands) {
                 _ => panic!("Invalid file index"),
             };
             
-            // Map our grid coordinates to chess rank 
-            // y=7 (bottom row in our drawing) -> Rank::First
-            // y=0 (top row in our drawing) -> Rank::Eighth
+            // Map our grid coordinates to chess rank - FLIPPED BOARD VERSION
+            // With flipped board, the rank numbering is reversed
             let rank = match y {
-                0 => Rank::Eighth,
-                1 => Rank::Seventh,
-                2 => Rank::Sixth,
-                3 => Rank::Fifth,
-                4 => Rank::Fourth,
-                5 => Rank::Third,
-                6 => Rank::Second,
-                7 => Rank::First,
+                7 => Rank::Eighth, // BOTTOM row is Rank 8 (black's first rank)
+                6 => Rank::Seventh,
+                5 => Rank::Sixth,
+                4 => Rank::Fifth,
+                3 => Rank::Fourth,
+                2 => Rank::Third,
+                1 => Rank::Second,
+                0 => Rank::First, // TOP row is Rank 1 (white's first rank)
                 _ => panic!("Invalid rank index"),
             };
             

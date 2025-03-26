@@ -8,11 +8,14 @@ pub struct GameLogicPlugin;
 // Standard chess starting position FEN
 const STANDARD_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-// Initialize game with standard FEN
+// For flipped board (black at bottom)
+const FLIPPED_FEN: &str = "RNBQKBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbqkbnr w KQkq - 0 1";
+
+// Initialize game with standard FEN - white at bottom, black at top
 fn init_game_state(mut commands: Commands) {
     match GameState::from_fen(STANDARD_FEN) {
         Ok(state) => {
-            println!("Initialized chess board with standard FEN");
+            println!("Initialized chess board with standard FEN (white at bottom)");
             commands.insert_resource(state);
         },
         Err(err) => {
