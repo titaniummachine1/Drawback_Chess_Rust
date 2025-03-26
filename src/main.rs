@@ -25,8 +25,10 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
              primary_window: Some(Window {
                  title: "Drawback Chess".into(),
-                 resolution: (constants::BOARD_SIZE_PX + 300.0, constants::BOARD_SIZE_PX).into(),
+                 // Make window exactly match board size for better coordinate translation
+                 resolution: (constants::BOARD_SIZE_PX, constants::BOARD_SIZE_PX).into(),
                  resizable: false,
+                 position: WindowPosition::Centered(MonitorSelection::Primary),
                  ..default()
              }),
              ..default()
