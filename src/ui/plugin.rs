@@ -11,9 +11,9 @@ impl Plugin for UiPlugin {
 fn setup_ui(mut commands: Commands) {
     println!("Setting up UI...");
     
-    // Add a camera with a clear view of the board
+    // Add a camera with a clear view of the board - position it at (0,0) to match the board center
     commands.spawn(Camera2dBundle {
-        transform: Transform::from_xyz(0.0, 0.0, 999.9),
+        transform: Transform::from_xyz(0.0, 0.0, 1000.0),
         ..default()
     });
     

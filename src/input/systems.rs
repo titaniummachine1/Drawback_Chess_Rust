@@ -41,117 +41,132 @@ pub fn handle_piece_selection(
     if let Some(cursor_position) = window.cursor_position() {
         println!("Mouse clicked at screen position: {:?}", cursor_position);
         let cursor_world_position = cursor_to_world_position(cursor_position, window, camera, camera_transform);
-        println!("World position: {:?}", cursor_world_position);
         
-        // Print all board square positions for debugging
-        println!("Board squares positions:");
-        for (transform, board_square) in board_squares.iter().take(5) { // Show just a few for clarity
-            println!("Square {:?} at position: {:?}", board_square.square, transform.translation.truncate());
-        }
+        // Find the closest board square to the click
+        let closest_square = find_closest_board_square(cursor_world_position, &board_squares);
         
-        // Check if a square was clicked
-        let mut clicked_square: Option<Square> = None;
-        for (transform, board_square) in board_squares.iter() {
-            let square_pos = transform.translation.truncate();
-            let half_size = TILE_SIZE / 2.0;
+        if let Some((pos, square)) = closest_square {
+            println!("Clicked closest to square: {:?} at position {:?}", square, pos);
             
-            // Check if cursor is within this square's bounds
-            if cursor_world_position.x >= square_pos.x - half_size
-                && cursor_world_position.x <= square_pos.x + half_size
-                && cursor_world_position.y >= square_pos.y - half_size
-                && cursor_world_position.y <= square_pos.y + half_size {
-                clicked_square = Some(board_square.square);
-                println!("Clicked on square: {:?} at position {:?}", board_square.square, square_pos);
-                break;
-            }
-        }
-        
-        if let Some(square) = clicked_square {
-            // If there's a piece selected, check if this is a valid move
-            if !selected.is_empty() {
-                // Check if the click is on a valid move destination
-                for (entity, valid_move) in valid_moves.iter() {
-                    if valid_move.chess_move.to() == square {
-                        // Valid move selected - send event to make the move
-                        println!("Making move: {:?}", valid_move.chess_move);
-                        ev_make_move.send(MakeMoveEvent(valid_move.chess_move.clone()));
-                        
-                        // Clear selection and valid moves
-                        for entity in selected.iter() {
-                            commands.entity(entity).remove::<SelectedPiece>();
-                        }
-                        
-                        for (entity, _) in valid_moves.iter() {
-                            commands.entity(entity).despawn();
-                        }
-                        
-                        return;
-                    }
-                }
-            }
-            
-            // Check if there's a piece on the clicked square
+            // First check if there's a piece on the clicked square
             println!("Looking for piece at square: {:?}", square);
             let mut clicked_on_piece = false;
-            for (entity, piece, _) in pieces.iter() {
-                println!("Checking piece: {:?} {:?} at {:?}", piece.color, piece.role, piece.pos);
-                if piece.pos == square {
-                    println!("Found piece matching square");
-                    if piece.color == game_state.current_player_turn {
-                        println!("Selected piece: {:?} {:?} at {:?}", piece.color, piece.role, piece.pos);
-                        
-                        // Clear previous selection and valid moves
-                        for entity in selected.iter() {
-                            commands.entity(entity).remove::<SelectedPiece>();
+            let mut clicked_on_selected_piece = false;
+            
+            // Check if we already have a selected piece
+            if !selected.is_empty() {
+                // Get the currently selected piece
+                for (entity, piece, _) in pieces.iter() {
+                    if selected.contains(entity) {
+                        // If we're clicking on the same piece that's already selected, deselect it
+                        if piece.pos == square {
+                            println!("Deselecting currently selected piece");
+                            clicked_on_selected_piece = true;
+                            
+                            // Clear selection and valid moves
+                            for entity in selected.iter() {
+                                commands.entity(entity).remove::<SelectedPiece>();
+                            }
+                            
+                            for (entity, _) in valid_moves.iter() {
+                                commands.entity(entity).despawn();
+                            }
                         }
-                        
-                        for (entity, _) in valid_moves.iter() {
-                            commands.entity(entity).despawn();
-                        }
-                        
-                        // Mark this piece as selected
-                        commands.entity(entity).insert(SelectedPiece);
-                        clicked_on_piece = true;
-                        
-                        // Spawn a highlight sprite for the selected piece
-                        commands.spawn((
-                            SpriteBundle {
-                                sprite: Sprite {
-                                    color: SELECTED_COLOR,
-                                    custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
-                                    ..default()
-                                },
-                                transform: Transform::from_translation(
-                                    Vec3::new(
-                                        ((piece.pos.file().char() as u8 - b'a') as f32 - 3.5) * TILE_SIZE,
-                                        ((7 - (piece.pos.rank().char() as u8 - b'1')) as f32 - 3.5) * TILE_SIZE,
-                                        -0.1, // Place slightly below pieces for correct layering
-                                    )
-                                ),
-                                ..default()
-                            },
-                            SelectedPiece, // Tag with same component so it gets cleaned up
-                        ));
-                        
-                        // Find and display valid moves for this piece
-                        display_valid_moves(
-                            &mut commands, 
-                            &game_state,
-                            piece.pos, 
-                            piece.color, 
-                            piece.role,
-                            &board_squares,
-                        );
-                        
                         break;
-                    } else {
-                        println!("Piece belongs to opponent, not selectable");
+                    }
+                }
+                
+                // If we're not clicking on the selected piece, check if we're clicking on a valid move
+                if !clicked_on_selected_piece {
+                    // Check if the click is on a valid move destination
+                    for (_entity, valid_move) in valid_moves.iter() {
+                        if valid_move.chess_move.to() == square {
+                            // Valid move selected - send event to make the move
+                            println!("Making move: {:?}", valid_move.chess_move);
+                            ev_make_move.send(MakeMoveEvent(valid_move.chess_move.clone()));
+                            
+                            // Also print additional debug info
+                            println!(">>> MAKING MOVE: from {:?} to {:?} <<<", 
+                                     valid_move.chess_move.from(), 
+                                     valid_move.chess_move.to());
+                            
+                            // Clear selection and valid moves
+                            for entity in selected.iter() {
+                                commands.entity(entity).remove::<SelectedPiece>();
+                            }
+                            
+                            for (entity, _) in valid_moves.iter() {
+                                commands.entity(entity).despawn();
+                            }
+                            
+                            return;
+                        }
                     }
                 }
             }
             
-            // If clicked on empty square or opponent's piece and nothing is selected, do nothing
-            if !clicked_on_piece {
+            // If we get here, either we didn't click on the selected piece or a valid move,
+            // so check if we clicked on another piece
+            if !clicked_on_selected_piece {
+                for (entity, piece, _) in pieces.iter() {
+                    if piece.pos == square {
+                        println!("Found piece matching square: {:?} {:?}", piece.color, piece.role);
+                        if piece.color == game_state.current_player_turn {
+                            println!("Selected piece: {:?} {:?} at {:?}", piece.color, piece.role, piece.pos);
+                            
+                            // Clear previous selection and valid moves
+                            for entity in selected.iter() {
+                                commands.entity(entity).remove::<SelectedPiece>();
+                            }
+                            
+                            for (entity, _) in valid_moves.iter() {
+                                commands.entity(entity).despawn();
+                            }
+                            
+                            // Mark this piece as selected
+                            commands.entity(entity).insert(SelectedPiece);
+                            clicked_on_piece = true;
+                            
+                            // Spawn a highlight sprite for the selected piece
+                            commands.spawn((
+                                SpriteBundle {
+                                    sprite: Sprite {
+                                        color: SELECTED_COLOR,
+                                        custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
+                                        ..default()
+                                    },
+                                    transform: Transform::from_translation(
+                                        Vec3::new(
+                                            ((piece.pos.file().char() as u8 - b'a') as f32 - 3.5) * TILE_SIZE,
+                                            ((7 - (piece.pos.rank().char() as u8 - b'1')) as f32 - 3.5) * TILE_SIZE,
+                                            -0.1, // Place slightly below pieces for correct layering
+                                        )
+                                    ),
+                                    ..default()
+                                },
+                                SelectedPiece, // Tag with same component so it gets cleaned up
+                            ));
+                            
+                            // Find and display valid moves for this piece
+                            display_valid_moves(
+                                &mut commands, 
+                                &game_state,
+                                piece.pos, 
+                                piece.color, 
+                                piece.role,
+                                &board_squares,
+                            );
+                            
+                            break;
+                        } else {
+                            println!("Piece belongs to opponent, not selectable");
+                        }
+                    }
+                }
+            }
+            
+            // If we didn't click on a friendly piece, clear selection (unless we already did above)
+            if !clicked_on_piece && !clicked_on_selected_piece {
                 println!("No friendly piece at square or clicked on empty square");
                 // If clicking on empty square without a selected piece, clear selection
                 for entity in selected.iter() {
@@ -163,7 +178,7 @@ pub fn handle_piece_selection(
                 }
             }
         } else {
-            println!("Click didn't land on any chess board square");
+            println!("No board squares found to click on");
         }
     }
 }
@@ -171,21 +186,45 @@ pub fn handle_piece_selection(
 // Helper function to convert cursor position to world coordinates
 fn cursor_to_world_position(
     cursor_pos: Vec2,
-    window: &Window,
+    _window: &Window,
     camera: &Camera,
     camera_transform: &GlobalTransform,
 ) -> Vec2 {
-    // Convert cursor position to normalized device coordinates (NDC)
-    let ndc = (cursor_pos / Vec2::new(window.width(), window.height())) * 2.0 - Vec2::ONE;
-    
-    // Use viewport_to_world to convert NDC to world coordinates
-    if let Some(ray) = camera.viewport_to_world(camera_transform, ndc) {
-        // For a 2D game, we're only interested in the XY coordinates
-        ray.origin.truncate()
-    } else {
-        println!("Failed to convert cursor position to world coordinates");
-        Vec2::ZERO
+    // For 2D games with a Camera2dBundle, use viewport_to_world_2d
+    // This correctly handles the camera's view and projection
+    match camera.viewport_to_world_2d(camera_transform, cursor_pos) {
+        Some(world_pos) => {
+            println!("Converted screen ({:?}) to world ({:?})", cursor_pos, world_pos);
+            world_pos
+        }
+        None => {
+            println!("Failed to convert cursor position to world coordinates");
+            Vec2::ZERO
+        }
     }
+}
+
+// Helper function to find the closest board square to a world position
+fn find_closest_board_square(
+    world_pos: Vec2,
+    board_squares: &Query<(&Transform, &BoardSquare)>,
+) -> Option<(Vec2, Square)> {
+    let mut closest_square = None;
+    let mut closest_distance = f32::MAX;
+    
+    for (transform, board_square) in board_squares.iter() {
+        let square_pos = transform.translation.truncate();
+        let distance = world_pos.distance_squared(square_pos);
+        
+        println!("Square: {:?} at position {:?}, distance: {}", board_square.square, square_pos, distance);
+        
+        if distance < closest_distance {
+            closest_distance = distance;
+            closest_square = Some((square_pos, board_square.square));
+        }
+    }
+    
+    closest_square
 }
 
 // Helper function to display valid moves for a selected piece
@@ -216,7 +255,7 @@ fn display_valid_moves(
                         SpriteBundle {
                             sprite: Sprite {
                                 color: LEGAL_MOVE_COLOR,
-                                custom_size: Some(Vec2::new(TILE_SIZE / 3.0, TILE_SIZE / 3.0)),
+                                custom_size: Some(Vec2::new(TILE_SIZE / 2.0, TILE_SIZE / 2.0)), // Make larger and more visible
                                 ..default()
                             },
                             transform: Transform::from_translation(

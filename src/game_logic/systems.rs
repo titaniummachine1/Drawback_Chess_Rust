@@ -13,13 +13,18 @@ pub fn apply_move(
 ) {
     for ev in ev_make_move.read() {
         let move_to_make = ev.0.clone();
+        println!(">>> RECEIVED MOVE EVENT: {:?}", move_to_make);
         
         // Check if move is legal
         let legal_moves = game_state.board.legal_moves();
+        println!("Available legal moves: {}", legal_moves.len());
+        
         if !legal_moves.contains(&move_to_make) {
-            println!("Illegal move attempted: {:?}", move_to_make);
+            println!("!!! ILLEGAL MOVE ATTEMPTED: {:?}", move_to_make);
             continue;
         }
+        
+        println!("*** LEGAL MOVE CONFIRMED: {:?}", move_to_make);
         
         // Log the move
         let from_square = move_to_make.from().unwrap_or(Square::A1); // Some special moves might not have from square

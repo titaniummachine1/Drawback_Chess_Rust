@@ -21,14 +21,21 @@ use ui::plugin::UiPlugin;
 use drawbacks::DrawbacksPlugin; // Use the drawbacks plugin (registers rules)
 
 fn main() {
+    // Make sure the window is large enough to show the entire board
+    let window_width = constants::BOARD_SIZE_PX;
+    let window_height = constants::BOARD_SIZE_PX;
+
     App::new()
+        .insert_resource(ClearColor(Color::rgb(0.1, 0.1, 0.1))) // Dark background
         .add_plugins(DefaultPlugins.set(WindowPlugin {
              primary_window: Some(Window {
                  title: "Drawback Chess".into(),
-                 // Make window exactly match board size for better coordinate translation
-                 resolution: (constants::BOARD_SIZE_PX, constants::BOARD_SIZE_PX).into(),
+                 // Make window large enough to show the entire board
+                 resolution: (window_width, window_height).into(),
                  resizable: false,
                  position: WindowPosition::Centered(MonitorSelection::Primary),
+                 // Make sure the window has correct scaling
+                 present_mode: bevy::window::PresentMode::AutoVsync,
                  ..default()
              }),
              ..default()

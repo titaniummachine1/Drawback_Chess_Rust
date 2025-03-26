@@ -7,7 +7,7 @@ use rand::prelude::*;
 /// Returns the best move found.
 pub fn find_best_move_mcts(ctx: AiGameStateContext, _iterations: u32) -> Option<Move> {
     // Get legal moves from current position
-    let mut board_copy = ctx.board.clone();
+    let board_copy = ctx.board.clone();
     let legal_moves = board_copy.legal_moves();
     
     if legal_moves.is_empty() {
@@ -16,6 +16,9 @@ pub fn find_best_move_mcts(ctx: AiGameStateContext, _iterations: u32) -> Option<
     
     let legal_moves_vec: Vec<Move> = legal_moves.into_iter().collect();
     let mut rng = rand::thread_rng();
+    
+    // Double check all our candidates are legal
+    println!("AI considering {} legal moves", legal_moves_vec.len());
     
     // Check if any move leads to immediate check
     let mut check_moves = Vec::new();
@@ -51,21 +54,34 @@ pub fn find_best_move_mcts(ctx: AiGameStateContext, _iterations: u32) -> Option<
     // 2. Moves that check
     // 3. Moves that capture
     // 4. Any random legal move
-    if !check_and_capture.is_empty() {
-        return check_and_capture.choose(&mut rng).cloned();
+    let selected_move = if !check_and_capture.is_empty() {
+        check_and_capture.choose(&mut rng).cloned()
     } else if !check_moves.is_empty() {
-        return check_moves.choose(&mut rng).cloned();
+        check_moves.choose(&mut rng).cloned()
     } else if !capture_moves.is_empty() {
-        return capture_moves.choose(&mut rng).cloned();
+        capture_moves.choose(&mut rng).cloned()
     } else {
-        return legal_moves_vec.choose(&mut rng).cloned();
+        legal_moves_vec.choose(&mut rng).cloned()
+    };
+    
+    // Final validation - make sure the move is legal
+    if let Some(mv) = &selected_move {
+        // Make sure this move is in our legal moves list
+        if !legal_moves_vec.contains(mv) {
+            println!("WARNING: AI tried to play illegal move: {:?}", mv);
+            // Fall back to a random legal move
+            return legal_moves_vec.choose(&mut rng).cloned();
+        }
+        println!("AI selected valid move: {:?}", mv);
     }
+    
+    selected_move
 }
 
 /// Helper function to check if a move captures a piece
 fn is_capturing_move(board: &Chess, m: &Move) -> bool {
     // Direct capture - destination has a piece
-    if let Some(to_square) = board.board().piece_at(m.to()) {
+    if let Some(_to_square) = board.board().piece_at(m.to()) {
         return true;
     }
     

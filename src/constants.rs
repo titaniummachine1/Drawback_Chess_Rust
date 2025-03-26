@@ -19,7 +19,7 @@ pub const BLACK_SQUARE_COLOR: Color = Color::rgb(0.3, 0.4, 0.3); // Dark green c
 
 // Colors for piece selection and move highlighting
 pub const SELECTED_COLOR: Color = Color::rgba(1.0, 1.0, 0.0, 0.5);
-pub const LEGAL_MOVE_COLOR: Color = Color::rgba(0.0, 1.0, 0.0, 0.7);
+pub const LEGAL_MOVE_COLOR: Color = Color::rgba(0.0, 1.0, 0.0, 0.9);
 pub const HOVER_COLOR: Color = Color::rgba(0.0, 0.0, 1.0, 0.3);
 
 // These colors are defined for potential future use

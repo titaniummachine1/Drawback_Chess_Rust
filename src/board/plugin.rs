@@ -17,16 +17,20 @@ fn setup_board(mut commands: Commands) {
     // Create board squares
     for y in 0..8 {
         for x in 0..8 {
-            // In chess, traditionally white squares are at coordinates where x+y is even
+            // In chess, h1 (bottom right) should be a light square
+            // This means (x+y) should be even for light squares
             let is_white = (x + y) % 2 == 0;
+            
+            // Position the squares in world space
+            // (0,0) is at the center, with the board centered on it
             let position = Vec3::new(
-                (x as f32 - 3.5) * TILE_SIZE,
-                ((7 - y) as f32 - 3.5) * TILE_SIZE, // Flip the y-coordinate to match chess board orientation
-                -0.2, // Below the pieces
+                (x as f32 - 3.5) * TILE_SIZE, // Center the board horizontally
+                ((7 - y) as f32 - 3.5) * TILE_SIZE, // Flip the y-coordinate so rank 1 is at bottom
+                0.0, // Place at z=0 as the background
             );
             
             // Convert x,y coordinates to shakmaty File/Rank
-            // In shakmaty, File A is on the left (x=0), Rank 1 is at the bottom (y=0)
+            // In shakmaty, File A is on the left (x=0), Rank 1 is at the bottom (y=7 in our grid)
             let file = match x {
                 0 => File::A,
                 1 => File::B,
@@ -39,9 +43,9 @@ fn setup_board(mut commands: Commands) {
                 _ => panic!("Invalid file index"),
             };
             
-            // When we draw the board, we flip the y-coordinate, so we need to map
-            // y=0 (top row in our drawing) to Rank::Eighth
-            // y=7 (bottom row in our drawing) to Rank::First
+            // Map our grid coordinates to chess rank 
+            // y=7 (bottom row in our drawing) -> Rank::First
+            // y=0 (top row in our drawing) -> Rank::Eighth
             let rank = match y {
                 0 => Rank::Eighth,
                 1 => Rank::Seventh,
@@ -57,6 +61,9 @@ fn setup_board(mut commands: Commands) {
             // Create the shakmaty Square
             let square = Square::from_coords(file, rank);
             
+            println!("Creating board square: {:?} at position {:?}, color: {}", 
+                     square, position, if is_white { "white" } else { "black" });
+            
             commands.spawn((
                 BoardSquare { 
                     x, 
@@ -69,10 +76,10 @@ fn setup_board(mut commands: Commands) {
                     sprite: Sprite {
                         color: if is_white { WHITE_SQUARE_COLOR } else { BLACK_SQUARE_COLOR },
                         custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
-                        ..Default::default()
+                        ..default()
                     },
                     transform: Transform::from_translation(position),
-                    ..Default::default()
+                    ..default()
                 },
             ));
         }

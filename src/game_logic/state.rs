@@ -1,6 +1,7 @@
 use bevy::prelude::*;
-use shakmaty::{Chess, Color as ChessColor};
+use shakmaty::{Chess, Color as ChessColor, Position, CastlingMode};
 use crate::drawbacks::registry::DrawbackId; // Use the ID enum
+use std::error::Error;
 
 // Represents the overall status of the game
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,13 +42,14 @@ pub struct GameState {
 impl Default for GameState {
     fn default() -> Self {
         Self {
-            board: Chess::default(),
+            // Use the standard starting position
+            board: Chess::default(), // Chess::default() already uses the standard FEN
             current_player_turn: ChessColor::White,
             status: GameStatus::Ongoing,
             white_drawback: DrawbackId::None, // Start with no drawback
             black_drawback: DrawbackId::None, // Start with no drawback
             current_turn_rng_outcome: None,
-             zobrist_hash: 0, // Initialize hash (will be calculated properly)
+            zobrist_hash: 0, // Initialize hash (will be calculated properly)
         }
     }
 }
@@ -59,5 +61,25 @@ impl GameState {
              ChessColor::White => self.white_drawback,
              ChessColor::Black => self.black_drawback,
          }
+    }
+    
+    // Utility function to create a GameState from a FEN string
+    pub fn from_fen(fen: &str) -> Result<Self, Box<dyn Error>> {
+        // Parse the FEN string to get a Chess position
+        let fen = shakmaty::fen::Fen::from_ascii(fen.as_bytes())?;
+        let board = fen.into_position::<Chess>(CastlingMode::Standard)?;
+        
+        // Determine the current player's turn from the board
+        let current_player_turn = board.turn();
+        
+        Ok(Self {
+            board,
+            current_player_turn,
+            status: GameStatus::Ongoing,
+            white_drawback: DrawbackId::None,
+            black_drawback: DrawbackId::None,
+            current_turn_rng_outcome: None,
+            zobrist_hash: 0,
+        })
     }
 } 
