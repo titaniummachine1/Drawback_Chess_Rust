@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use crate::constants::*;
 use super::components::*;
+use shakmaty::{Square, File, Rank};
 
 pub struct BoardPlugin;
 
@@ -23,11 +24,20 @@ fn setup_board(mut commands: Commands) {
                 0.0,
             );
             
+            // Convert x,y coordinates to shakmaty File/Rank
+            // Note: In shakmaty, Rank 1 is at the bottom (y=0), File A is on the left (x=0)
+            let file = File::from_index(x).expect("Invalid file index");
+            let rank = Rank::from_index(y).expect("Invalid rank index");
+            
+            // Create the shakmaty Square
+            let square = Square::from_coords(file, rank);
+            
             commands.spawn((
                 BoardSquare { 
                     x, 
                     y, 
-                    is_white 
+                    is_white,
+                    square,
                 },
                 BoardSquareVisual,
                 SpriteBundle {

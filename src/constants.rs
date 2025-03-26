@@ -17,7 +17,11 @@ pub const BOARD_SIZE_PX: f32 = TILE_SIZE * NUM_COLS as f32;
 pub const WHITE_SQUARE_COLOR: Color = Color::rgb(0.9, 0.9, 0.9);
 pub const BLACK_SQUARE_COLOR: Color = Color::rgb(0.5, 0.5, 0.5);
 
+// Colors for piece selection and move highlighting
+pub const SELECTED_COLOR: Color = Color::rgba(1.0, 1.0, 0.0, 0.5);
+pub const LEGAL_MOVE_COLOR: Color = Color::rgba(0.0, 1.0, 0.0, 0.7);
+pub const HOVER_COLOR: Color = Color::rgba(0.0, 0.0, 1.0, 0.3);
+
 // These colors are defined for potential future use
 // pub const ACTIVE_COLOR: Color = Color::rgba(0.0, 1.0, 0.0, 0.7);
-// pub const HOVER_COLOR: Color = Color::rgba(0.0, 0.0, 1.0, 0.3);
 // pub const FROM_SQUARE_COLOR: Color = Color::rgba(1.0, 1.0, 0.0, 0.5); 

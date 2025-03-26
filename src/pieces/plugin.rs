@@ -41,18 +41,11 @@ pub fn spawn_pieces(
                 (ChessColor::White, Role::Rook) => "pieces/white_rook.png",
                 (ChessColor::White, Role::Pawn) => "pieces/white_pawn.png",
                 (ChessColor::Black, Role::King) => "pieces/black_king.png",
-                (ChessColor::Black, Role::Queen) => "pieces/black_king.png", // Using king placeholder
-                (ChessColor::Black, Role::Bishop) => "pieces/black_king.png", // Using king placeholder
-                (ChessColor::Black, Role::Knight) => "pieces/black_king.png", // Using king placeholder
-                (ChessColor::Black, Role::Rook) => "pieces/black_king.png", // Using king placeholder
-                (ChessColor::Black, Role::Pawn) => "pieces/black_king.png", // Using king placeholder
-            };
-
-            // Create a bundle based on whether the image exists or not
-            let color = if piece.color == ChessColor::White {
-                Color::WHITE
-            } else {
-                Color::BLACK
+                (ChessColor::Black, Role::Queen) => "pieces/black_queen.png",
+                (ChessColor::Black, Role::Bishop) => "pieces/black_bishop.png",
+                (ChessColor::Black, Role::Knight) => "pieces/black_knight.png",
+                (ChessColor::Black, Role::Rook) => "pieces/black_rook.png",
+                (ChessColor::Black, Role::Pawn) => "pieces/black_pawn.png",
             };
 
             commands.spawn((
@@ -60,7 +53,7 @@ pub fn spawn_pieces(
                     texture: asset_server.load(sprite_path),
                     transform: Transform::from_translation(position),
                     sprite: Sprite {
-                        color,
+                        custom_size: Some(Vec2::new(TILE_SIZE * 0.9, TILE_SIZE * 0.9)), // Slightly smaller than tile
                         ..default()
                     },
                     ..default()
