@@ -1,4 +1,4 @@
-I wish you can.use bevy::prelude::*;
+use bevy::prelude::*;
 
 pub struct UiPlugin;
 
