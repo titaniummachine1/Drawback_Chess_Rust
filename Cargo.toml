@@ -1,0 +1,10 @@
+[package]
+name = "drawback_chess"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "0.13"
+shakmaty = "0.26"
+rand = "0.8"
+futures-lite = "1.13" 
