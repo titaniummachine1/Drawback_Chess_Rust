@@ -25,12 +25,20 @@ pub fn spawn_pieces(
         if let Some(piece) = game_state.board.board().piece_at(square) {
             // Calculate position based on square
             let file = square.file().char() as u8 - b'a'; // 0-7 for files a-h
+            
+            // For visualization: convert rank 1-8 to position on screen
+            // We need to flip the rank value to get white at the bottom and black at the top
+            // Rank 1 (white's first rank) should be at the bottom (y=7 in our board)
+            // Rank 8 (black's first rank) should be at the top (y=0 in our board)
             let rank = square.rank().char() as u8 - b'1'; // 0-7 for ranks 1-8
+            
             let position = Vec3::new(
                 (file as f32 - 3.5) * TILE_SIZE, // Center the board horizontally
                 ((7 - rank) as f32 - 3.5) * TILE_SIZE, // Flip the rank to match chess board orientation
                 0.1, // Place slightly above board and highlights
             );
+
+            println!("Placing piece at square: {:?}, position: {:?}", square, position);
 
             // Determine piece image path based on color and role
             let color_prefix = match piece.color {

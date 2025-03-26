@@ -43,6 +43,12 @@ pub fn handle_piece_selection(
         let cursor_world_position = cursor_to_world_position(cursor_position, window, camera, camera_transform);
         println!("World position: {:?}", cursor_world_position);
         
+        // Print all board square positions for debugging
+        println!("Board squares positions:");
+        for (transform, board_square) in board_squares.iter().take(5) { // Show just a few for clarity
+            println!("Square {:?} at position: {:?}", board_square.square, transform.translation.truncate());
+        }
+        
         // Check if a square was clicked
         let mut clicked_square: Option<Square> = None;
         for (transform, board_square) in board_squares.iter() {
@@ -55,7 +61,7 @@ pub fn handle_piece_selection(
                 && cursor_world_position.y >= square_pos.y - half_size
                 && cursor_world_position.y <= square_pos.y + half_size {
                 clicked_square = Some(board_square.square);
-                println!("Clicked on square: {:?}", board_square.square);
+                println!("Clicked on square: {:?} at position {:?}", board_square.square, square_pos);
                 break;
             }
         }
@@ -85,55 +91,62 @@ pub fn handle_piece_selection(
             }
             
             // Check if there's a piece on the clicked square
+            println!("Looking for piece at square: {:?}", square);
             let mut clicked_on_piece = false;
             for (entity, piece, _) in pieces.iter() {
-                if piece.pos == square && piece.color == game_state.current_player_turn {
-                    println!("Selected piece: {:?} {:?} at {:?}", piece.color, piece.role, piece.pos);
-                    
-                    // Clear previous selection and valid moves
-                    for entity in selected.iter() {
-                        commands.entity(entity).remove::<SelectedPiece>();
-                    }
-                    
-                    for (entity, _) in valid_moves.iter() {
-                        commands.entity(entity).despawn();
-                    }
-                    
-                    // Mark this piece as selected
-                    commands.entity(entity).insert(SelectedPiece);
-                    clicked_on_piece = true;
-                    
-                    // Spawn a highlight sprite for the selected piece
-                    commands.spawn((
-                        SpriteBundle {
-                            sprite: Sprite {
-                                color: SELECTED_COLOR,
-                                custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
+                println!("Checking piece: {:?} {:?} at {:?}", piece.color, piece.role, piece.pos);
+                if piece.pos == square {
+                    println!("Found piece matching square");
+                    if piece.color == game_state.current_player_turn {
+                        println!("Selected piece: {:?} {:?} at {:?}", piece.color, piece.role, piece.pos);
+                        
+                        // Clear previous selection and valid moves
+                        for entity in selected.iter() {
+                            commands.entity(entity).remove::<SelectedPiece>();
+                        }
+                        
+                        for (entity, _) in valid_moves.iter() {
+                            commands.entity(entity).despawn();
+                        }
+                        
+                        // Mark this piece as selected
+                        commands.entity(entity).insert(SelectedPiece);
+                        clicked_on_piece = true;
+                        
+                        // Spawn a highlight sprite for the selected piece
+                        commands.spawn((
+                            SpriteBundle {
+                                sprite: Sprite {
+                                    color: SELECTED_COLOR,
+                                    custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
+                                    ..default()
+                                },
+                                transform: Transform::from_translation(
+                                    Vec3::new(
+                                        ((piece.pos.file().char() as u8 - b'a') as f32 - 3.5) * TILE_SIZE,
+                                        ((7 - (piece.pos.rank().char() as u8 - b'1')) as f32 - 3.5) * TILE_SIZE,
+                                        -0.1, // Place slightly below pieces for correct layering
+                                    )
+                                ),
                                 ..default()
                             },
-                            transform: Transform::from_translation(
-                                Vec3::new(
-                                    ((piece.pos.file().char() as u8 - b'a') as f32 - 3.5) * TILE_SIZE,
-                                    ((piece.pos.rank().char() as u8 - b'1') as f32 - 3.5) * TILE_SIZE,
-                                    -0.1, // Place slightly below pieces for correct layering
-                                )
-                            ),
-                            ..default()
-                        },
-                        SelectedPiece, // Tag with same component so it gets cleaned up
-                    ));
-                    
-                    // Find and display valid moves for this piece
-                    display_valid_moves(
-                        &mut commands, 
-                        &game_state,
-                        piece.pos, 
-                        piece.color, 
-                        piece.role,
-                        &board_squares,
-                    );
-                    
-                    break;
+                            SelectedPiece, // Tag with same component so it gets cleaned up
+                        ));
+                        
+                        // Find and display valid moves for this piece
+                        display_valid_moves(
+                            &mut commands, 
+                            &game_state,
+                            piece.pos, 
+                            piece.color, 
+                            piece.role,
+                            &board_squares,
+                        );
+                        
+                        break;
+                    } else {
+                        println!("Piece belongs to opponent, not selectable");
+                    }
                 }
             }
             
@@ -162,19 +175,16 @@ fn cursor_to_world_position(
     camera: &Camera,
     camera_transform: &GlobalTransform,
 ) -> Vec2 {
-    // Get the size of the window
-    let window_size = Vec2::new(window.width(), window.height());
-    
     // Convert cursor position to normalized device coordinates (NDC)
-    // NDC range from -1 to 1, with (0,0) at the center
-    let ndc = (cursor_pos / window_size) * 2.0 - Vec2::ONE;
+    let ndc = (cursor_pos / Vec2::new(window.width(), window.height())) * 2.0 - Vec2::ONE;
     
-    // Convert to world coordinates
-    if let Some(matrix) = camera.viewport_to_world(camera_transform, ndc) {
-        matrix.origin.truncate()
+    // Use viewport_to_world to convert NDC to world coordinates
+    if let Some(ray) = camera.viewport_to_world(camera_transform, ndc) {
+        // For a 2D game, we're only interested in the XY coordinates
+        ray.origin.truncate()
     } else {
         println!("Failed to convert cursor position to world coordinates");
-        Vec2::ZERO // Fallback
+        Vec2::ZERO
     }
 }
 
