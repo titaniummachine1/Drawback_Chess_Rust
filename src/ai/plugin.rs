@@ -10,6 +10,7 @@ use crate::config::GameConfig;
 use crate::constants::DEFAULT_BOARD_FLIPPED;
 use super::components::AiThinking;
 use super::mcts::find_best_move_mcts;
+use rand::Rng;
 
 pub struct AiPlugin;
 
@@ -68,6 +69,21 @@ fn request_ai_move(
     if q_ai_task.is_empty() {
         println!("AI turn detected. Spawning calculation task...");
 
+        // Debug output - show legal moves
+        let legal_moves = game_state.board.legal_moves();
+        println!("AI found {} legal moves on current board", legal_moves.len());
+        
+        // Print out board state for debugging
+        println!("Current board state: {:?}", game_state.board);
+        println!("Current player turn: {:?}", game_state.current_player_turn);
+        
+        // If no legal moves, we should handle that gracefully
+        if legal_moves.is_empty() {
+            println!("WARNING: No legal moves available for AI - should check if game is over");
+            // We could handle this by transitioning to a different state
+            return;
+        }
+
         let thread_pool = AsyncComputeTaskPool::get();
 
         // Create a deep copy of the game state for AI to use
@@ -121,6 +137,7 @@ fn check_ai_move_result(
     mut commands: Commands,
     mut task_q: Query<(Entity, &mut AiThinking)>,
     mut ev_make_move: EventWriter<MakeMoveEvent>,
+    mut next_state: ResMut<NextState<TurnState>>,
     game_state: Res<GameState>,
 ) {
     for (entity, mut ai_task) in task_q.iter_mut() {
@@ -141,10 +158,23 @@ fn check_ai_move_result(
                         ev_make_move.send(MakeMoveEvent(fallback_move));
                     } else {
                         eprintln!("No valid moves available. Game might be in a terminal state.");
+                        // Change state to player's turn if AI can't move
+                        next_state.set(TurnState::PlayerTurn);
                     }
                 }
             } else {
                 eprintln!("AI task finished but returned no move. Game state might be terminal.");
+                
+                // Check if there are actually no legal moves
+                let legal_moves = game_state.board.legal_moves();
+                if legal_moves.is_empty() {
+                    eprintln!("No legal moves available. Setting state to player's turn.");
+                    // Change state to player's turn if AI can't move
+                    next_state.set(TurnState::PlayerTurn);
+                } else if let Some(fallback_move) = get_fallback_move(&game_state) {
+                    println!("Using fallback random move as AI couldn't decide: {:?}", fallback_move);
+                    ev_make_move.send(MakeMoveEvent(fallback_move));
+                }
             }
             commands.entity(entity).despawn();
             println!("Despawned AI task entity.");
@@ -154,42 +184,20 @@ fn check_ai_move_result(
 }
 
 /// Validate that an AI move is valid for the current game state
-fn validate_ai_move(game_state: &GameState, ai_move: &Move) -> bool {
-    // Check if the move is in the legal moves list
+fn validate_ai_move(game_state: &GameState, proposed_move: &Move) -> bool {
+    // Simply check if the move is in the current list of legal moves
     let legal_moves = game_state.board.legal_moves();
-    if !legal_moves.contains(ai_move) {
-        println!("Move is not in legal moves list");
-        return false;
-    }
-    
-    // For normal moves, check that the source square has a piece of the correct color
-    if let Some(from_square) = ai_move.from() {
-        if let Some(piece) = game_state.board.board().piece_at(from_square) {
-            if piece.color != game_state.current_player_turn {
-                println!("Source square has piece of wrong color");
-                return false;
-            }
-        } else {
-            println!("Warning: Couldn't find piece at source square {:?}", from_square);
-            return false;
-        }
-    }
-    
-    // Additional drawback-specific validation could be added here
-    // For now, we trust the basic legality check from shakmaty
-    
-    true
+    legal_moves.contains(proposed_move)
 }
 
-/// Get a simple fallback move when the AI's chosen move is invalid
+/// Select a random fallback move from legal moves
 fn get_fallback_move(game_state: &GameState) -> Option<Move> {
     let legal_moves = game_state.board.legal_moves();
     if legal_moves.is_empty() {
         return None;
     }
     
-    // Get the first legal move as a fallback
-    // In a more sophisticated implementation, we might rank moves by simple heuristics
-    let legal_moves_vec: Vec<Move> = legal_moves.into_iter().collect();
-    legal_moves_vec.first().cloned()
+    let mut rng = rand::thread_rng();
+    let random_idx = rng.gen_range(0..legal_moves.len());
+    Some(legal_moves[random_idx].clone())
 } 

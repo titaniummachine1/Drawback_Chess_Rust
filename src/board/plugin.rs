@@ -20,7 +20,7 @@ fn handle_board_flip(
     mut board_squares: Query<(&mut Transform, &BoardSquare)>,
     mut pieces: Query<(&mut Transform, &crate::pieces::components::Piece), Without<BoardSquare>>,
 ) {
-    if keys.just_pressed(KeyCode::R) {
+    if keys.just_pressed(KeyCode::F) {
         // Toggle the board flipped state
         game_state.board_flipped = !game_state.board_flipped;
         println!("Board flipped: {}", game_state.board_flipped);

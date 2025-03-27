@@ -7,12 +7,13 @@ use std::time::{Duration, Instant};
 use crate::drawbacks::DrawbackId;
 use crate::drawbacks::registry::DrawbackRegistry;
 use super::plugin::AiGameStateContext;
+use super::evaluation::{evaluate_position_with_pst, compute_game_phase};
 use rand::prelude::*;
 
 /// AI implementation to find a move with improved heuristics.
 /// Evaluates positions by examining material, checks, and board control.
 /// Prioritizes capturing the king or defending against king captures.
-pub fn find_best_move_mcts_original(ctx: AiGameStateContext, _iterations: u32) -> Option<Move> {
+pub fn find_best_move_mcts(ctx: AiGameStateContext, iterations: u32) -> Option<Move> {
     // Get legal moves from current position
     let board_copy = ctx.board.clone();
     let legal_moves = board_copy.legal_moves();
@@ -85,8 +86,10 @@ pub fn find_best_move_mcts_original(ctx: AiGameStateContext, _iterations: u32) -
             score += 300; // Bonus for any legal move when in check
         }
         
-        // Add material evaluation
-        score += evaluate_material(&test_board);
+        // Add evaluation using piece-square tables
+        let pst_score = evaluate_position_with_pst(&test_board);
+        println!("Move {:?} - PST evaluation: {}", m, pst_score);
+        score += pst_score;
         
         // Add the scored move to our list
         move_scores.push((m.clone(), score));
@@ -94,6 +97,12 @@ pub fn find_best_move_mcts_original(ctx: AiGameStateContext, _iterations: u32) -
     
     // Sort moves by score (descending)
     move_scores.sort_by(|a, b| b.1.cmp(&a.1));
+    
+    // Print the top 3 best moves with their scores for debugging
+    println!("Top move evaluations:");
+    for (i, (mv, score)) in move_scores.iter().take(3).enumerate() {
+        println!("  {}. {:?} - Score: {}", i+1, mv, score);
+    }
     
     // Take the best move, or if scores are tied, choose randomly among the best
     let best_score = if let Some((_, score)) = move_scores.first() {
@@ -108,6 +117,8 @@ pub fn find_best_move_mcts_original(ctx: AiGameStateContext, _iterations: u32) -
         .filter(|(_, score)| *score == best_score)
         .map(|(mv, _)| mv.clone())
         .collect();
+    
+    println!("Found {} moves with best score {}", best_moves.len(), best_score);
     
     // Choose randomly among best moves
     let selected_move = best_moves.choose(&mut rng).cloned();
@@ -132,42 +143,6 @@ fn is_king_capture(board: &Chess, m: &Move) -> bool {
         return piece.role == Role::King;
     }
     false
-}
-
-/// Helper function to evaluate material advantage
-fn evaluate_material(board: &Chess) -> i32 {
-    let mut score = 0;
-    
-    // Material values
-    const PAWN_VALUE: i32 = 100;
-    const KNIGHT_VALUE: i32 = 320;
-    const BISHOP_VALUE: i32 = 330;
-    const ROOK_VALUE: i32 = 500;
-    const QUEEN_VALUE: i32 = 900;
-    const KING_VALUE: i32 = 10000; // Very high value for king in Drawback Chess
-    
-    // Evaluate material for each side
-    for square in Square::ALL {
-        if let Some(piece) = board.board().piece_at(square) {
-            let piece_value = match piece.role {
-                Role::Pawn => PAWN_VALUE,
-                Role::Knight => KNIGHT_VALUE,
-                Role::Bishop => BISHOP_VALUE,
-                Role::Rook => ROOK_VALUE,
-                Role::Queen => QUEEN_VALUE,
-                Role::King => KING_VALUE, // Include king value in material count
-            };
-            
-            // Add to score for AI pieces (black), subtract for opponent pieces
-            if piece.color == board.turn() {
-                score += piece_value;
-            } else {
-                score -= piece_value;
-            }
-        }
-    }
-    
-    score
 }
 
 /// Helper function to get the value of a captured piece
@@ -367,8 +342,8 @@ fn is_position_quiet(position: &Chess) -> bool {
     true
 }
 
-/// MCTS algorithm to find the best move
-pub fn find_best_move_mcts(context: AiGameStateContext, iterations: u32) -> Option<Move> {
+/// Monte Carlo Tree Search implementation for finding the best move
+pub fn find_best_move_mcts_monte_carlo(context: AiGameStateContext, iterations: u32) -> Option<Move> {
     // Start timing
     let start_time = Instant::now();
     let time_limit = Duration::from_millis(context.time_limit_ms as u64);

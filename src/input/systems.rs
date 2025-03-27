@@ -253,7 +253,55 @@ fn display_valid_moves(
     // Filter moves to only those from the selected piece's square
     let mut valid_move_count = 0;
     for chess_move in legals {
-        // Check if this move starts from our selected piece's square
+        // Special handling for castling moves
+        if piece_role == Role::King {
+            if let Move::Castle { king, rook: _ } = chess_move {
+                if king == from_square {
+                    // This is a castling move, find the destination square for the king
+                    let king_to = chess_move.to();
+                    
+                    valid_move_count += 1;
+                    println!("Valid castling move: King from {:?} to {:?}", from_square, king_to);
+                    
+                    // Find the board square entity for the king's destination
+                    for (_, board_square) in board_squares.iter() {
+                        if board_square.square == king_to {
+                            // Calculate the file and rank for king's destination
+                            let file = king_to.file().char() as u8 - b'a';
+                            let rank = king_to.rank().char() as u8 - b'1';
+                            
+                            // Create highlight for king's destination square
+                            let position = calculate_highlight_position(
+                                file as usize,
+                                rank as usize,
+                                Z_LEGAL_MOVES,
+                                game_state.board_flipped
+                            );
+                            
+                            // Spawn a move indicator for the destination
+                            commands.spawn((
+                                SpriteBundle {
+                                    sprite: Sprite {
+                                        color: LEGAL_MOVE_COLOR,
+                                        custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
+                                        ..default()
+                                    },
+                                    transform: Transform::from_translation(position),
+                                    ..default()
+                                },
+                                ValidMoveDestination {
+                                    chess_move: chess_move.clone(),
+                                },
+                            ));
+                            break;
+                        }
+                    }
+                    continue;
+                }
+            }
+        }
+        
+        // Handle regular moves
         if let Some(from) = chess_move.from() {
             if from == from_square {
                 valid_move_count += 1;
@@ -282,36 +330,21 @@ fn display_valid_moves(
                             game_state.board_flipped
                         );
                         
-                        if is_capture {
-                            // For captures, create a red circle indicator (capture)
-                            commands.spawn((
-                                SpriteBundle {
-                                    sprite: Sprite {
-                                        color: Color::rgba(0.9, 0.2, 0.2, 0.7), // Bright red for captures
-                                        custom_size: Some(Vec2::new(TILE_SIZE * 0.4, TILE_SIZE * 0.4)),
-                                        ..default()
-                                    },
-                                    transform: Transform::from_translation(position),
+                        // Spawn the move indicator
+                        commands.spawn((
+                            SpriteBundle {
+                                sprite: Sprite {
+                                    color: LEGAL_MOVE_COLOR,
+                                    custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
                                     ..default()
                                 },
-                                ValidMoveDestination { chess_move: chess_move.clone() },
-                            ));
-                        } else {
-                            // For regular moves, create a smaller green circle
-                            commands.spawn((
-                                SpriteBundle {
-                                    sprite: Sprite {
-                                        color: Color::rgba(0.2, 0.8, 0.2, 0.7), // Bright green for regular moves
-                                        custom_size: Some(Vec2::new(TILE_SIZE * 0.3, TILE_SIZE * 0.3)),
-                                        ..default()
-                                    },
-                                    transform: Transform::from_translation(position),
-                                    ..default()
-                                },
-                                ValidMoveDestination { chess_move },
-                            ));
-                        }
-                        
+                                transform: Transform::from_translation(position),
+                                ..default()
+                            },
+                            ValidMoveDestination {
+                                chess_move: chess_move.clone(),
+                            },
+                        ));
                         break;
                     }
                 }
@@ -319,8 +352,5 @@ fn display_valid_moves(
         }
     }
     
-    println!("Displaying {} valid moves for selected piece at {:?}", valid_move_count, from_square);
-    if valid_move_count == 0 {
-        println!("WARNING: No valid moves found for selected piece at {:?}", from_square);
-    }
+    println!("Found {} valid moves for selected piece", valid_move_count);
 }

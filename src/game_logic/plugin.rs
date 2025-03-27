@@ -25,7 +25,7 @@ impl Plugin for GameLogicPlugin {
             .add_systems(Startup, init_game_state)
             .add_systems(
                 Update,
-                apply_move.run_if(in_state(TurnState::PlayerTurn))
+                apply_move.run_if(in_state(TurnState::PlayerTurn).or_else(in_state(TurnState::AiTurn)))
             );
     }
 }
