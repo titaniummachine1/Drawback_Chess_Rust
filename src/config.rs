@@ -45,11 +45,11 @@ impl Default for GameConfig {
                 index: None,
             },
             ai_settings: AiSettings {
-                iteration_limit: 1000,
+                iteration_limit: 10000,
                 time_limit_ms: 3000,
-                depth_limit: 4,
+                depth_limit: 14,
                 check_quietness: true,
-                quiescence_depth: 2,
+                quiescence_depth: 6,
             },
         }
     }
@@ -144,8 +144,9 @@ impl Plugin for ConfigPlugin {
         // Add configuration as a resource
         app.insert_resource(config);
         
-        // Add systems
-        app.add_systems(Startup, apply_config_to_game_state);
+        // Add systems - but we'll apply config to game state in Update systems
+        // to ensure GameState is already created by the GameLogicPlugin
+        app.add_systems(Update, apply_config_to_game_state.run_if(resource_exists::<crate::game_logic::state::GameState>()));
     }
 }
 
@@ -154,6 +155,15 @@ fn apply_config_to_game_state(
     config: Res<GameConfig>,
     mut game_state: ResMut<crate::game_logic::state::GameState>,
 ) {
+    // Only apply once
+    static mut APPLIED: bool = false;
+    unsafe {
+        if APPLIED {
+            return;
+        }
+        APPLIED = true;
+    }
+
     // Set drawbacks based on configuration
     game_state.white_drawback = config.resolve_drawback_id(&config.white_drawback);
     game_state.black_drawback = config.resolve_drawback_id(&config.black_drawback);

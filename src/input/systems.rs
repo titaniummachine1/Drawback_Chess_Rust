@@ -17,7 +17,7 @@ pub struct ValidMoveDestination {
 }
 
 pub fn handle_piece_selection(
-    mouse_button: Res<ButtonInput<MouseButton>>,
+    mouse_button: Res<Input<MouseButton>>,
     windows: Query<&Window>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     board_squares: Query<(&Transform, &BoardSquare)>,

@@ -13,12 +13,12 @@ pub struct GameLogicPlugin;
 pub const STANDARD_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 /// The flipped chess starting position FEN (black at bottom, white at top)
-pub const FLIPPED_FEN: &str = "RNBQKBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbqkbnr w KQkq - 0 1";
+pub const FLIPPED_FEN: &str = "RNBQKBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbqkbnr w - - 0 1";
 
 impl Plugin for GameLogicPlugin {
     fn build(&self, app: &mut App) {
         app
-            .init_state::<TurnState>()
+            .add_state::<TurnState>()
             .add_event::<MakeMoveEvent>()
             .add_event::<GameOverEvent>()
             .add_systems(Startup, init_game_state)

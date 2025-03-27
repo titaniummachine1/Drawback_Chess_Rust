@@ -17,14 +17,37 @@ struct PromotionOption {
     color: ChessColor,
 }
 
+#[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
+enum PiecesState {
+    #[default]
+    NotInitialized,
+    Initialized,
+}
+
 pub struct PiecesPlugin;
 
 impl Plugin for PiecesPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_pieces)
+        app.add_state::<PiecesState>()
+           .add_systems(Update, 
+                spawn_pieces
+                .run_if(resource_exists::<GameState>())
+                .run_if(in_state(PiecesState::NotInitialized))
+           )
+           .add_systems(Update, 
+                apply_state_transition
+                .after(spawn_pieces)
+                .run_if(in_state(PiecesState::NotInitialized))
+           )
            .add_systems(Update, update_piece_positions)
            .add_systems(Update, handle_promotion_selection);
     }
+}
+
+fn apply_state_transition(
+    mut next_state: ResMut<NextState<PiecesState>>,
+) {
+    next_state.set(PiecesState::Initialized);
 }
 
 /// Handle clicks on promotion piece options
@@ -32,7 +55,7 @@ fn handle_promotion_selection(
     mut commands: Commands,
     query: Query<(Entity, &PromotionOption, &Parent)>,
     ui_query: Query<Entity, With<PromotionUI>>,
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    mouse_buttons: Res<Input<MouseButton>>,
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut ev_make_move: EventWriter<MakeMoveEvent>,

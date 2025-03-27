@@ -69,10 +69,21 @@ fn request_ai_move(
 
         let thread_pool = AsyncComputeTaskPool::get();
 
+        // Create a deep copy of the game state for AI to use
+        let game_state_copy = GameState {
+            board: game_state.board.clone(),
+            current_player_turn: game_state.current_player_turn,
+            status: game_state.status,
+            white_drawback: game_state.white_drawback,
+            black_drawback: game_state.black_drawback,
+            current_turn_rng_outcome: game_state.current_turn_rng_outcome,
+            zobrist_hash: game_state.zobrist_hash,
+        };
+
         // Determine current player and opponent drawback IDs
-        let (player_id, opponent_id) = match game_state.current_player_turn {
-             ChessColor::White => (game_state.white_drawback, game_state.black_drawback),
-             ChessColor::Black => (game_state.black_drawback, game_state.white_drawback),
+        let (player_id, opponent_id) = match game_state_copy.current_player_turn {
+             ChessColor::White => (game_state_copy.white_drawback, game_state_copy.black_drawback),
+             ChessColor::Black => (game_state_copy.black_drawback, game_state_copy.white_drawback),
         };
 
         // Create DrawbackRule instances if needed for the current game state
@@ -89,8 +100,8 @@ fn request_ai_move(
             None
         };
 
-        // Prepare data for the async task
-        let ai_context = AiGameStateContext::from_game_state(&game_state, &config);
+        // Prepare data for the async task - using the copy
+        let ai_context = AiGameStateContext::from_game_state(&game_state_copy, &config);
         let iterations = config.ai_settings.iteration_limit;
 
         // Spawn the Async Task

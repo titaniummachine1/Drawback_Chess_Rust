@@ -338,7 +338,10 @@ fn evaluate_position(position: &Chess, player_drawback: DrawbackId, opponent_dra
     }
     
     // Normalize score to [0, 1] range
-    let normalized_score = cmp::max(0.0, cmp::min(80.0, score + 40.0)) / 80.0;
+    let score_plus_offset = score + 40.0;
+    let clamped_low = if score_plus_offset < 0.0 { 0.0 } else { score_plus_offset };
+    let clamped_high = if clamped_low > 80.0 { 80.0 } else { clamped_low };
+    let normalized_score = clamped_high / 80.0;
     
     // Return the score
     normalized_score
@@ -366,12 +369,18 @@ fn is_position_quiet(position: &Chess) -> bool {
 
 /// MCTS algorithm to find the best move
 pub fn find_best_move_mcts(context: AiGameStateContext, iterations: u32) -> Option<Move> {
+    // Start timing
     let start_time = Instant::now();
     let time_limit = Duration::from_millis(context.time_limit_ms as u64);
     
-    let player_is_white = context.player_turn == Color::White;
-    let mut root = MCTSNode::new(context.board.clone(), None, context.current_hash);
-    root.expand(context.player_drawback, context.opponent_drawback, context.player_turn);
+    // Ensure we're working with a copied board
+    let board_copy = context.board.clone();
+    let player_turn = context.player_turn;
+    let player_is_white = player_turn == Color::White;
+    
+    // Create root node with the copied board 
+    let mut root = MCTSNode::new(board_copy, None, context.current_hash);
+    root.expand(context.player_drawback, context.opponent_drawback, player_turn);
     
     // Skip if no legal moves
     if root.unexplored_moves.is_empty() {
@@ -392,41 +401,74 @@ pub fn find_best_move_mcts(context: AiGameStateContext, iterations: u32) -> Opti
             break;
         }
         
-        // Selection and Expansion phase
+        // Selection and Expansion phases - simplified to avoid borrow checker issues
+        let mut current_path = Vec::new();
         let mut current_node = &mut root;
-        let mut path = Vec::new();
         
-        // Selection phase
-        while current_node.unexplored_moves.is_empty() && !current_node.children.is_empty() {
-            if let Some(best_child_idx) = current_node.best_child(true) {
-                path.push(current_node);
-                current_node = path.last_mut().unwrap().children.get_mut(best_child_idx).unwrap();
+        // Selection phase - visit nodes until we find a leaf
+        loop {
+            if current_node.unexplored_moves.is_empty() && !current_node.children.is_empty() {
+                // Node is fully expanded but not a leaf, select best child
+                if let Some(best_idx) = current_node.best_child(true) {
+                    // Save the path we're taking
+                    current_path.push(best_idx);
+                    
+                    // Navigate to the best child
+                    let child_idx = best_idx;
+                    // We can't keep a mutable reference while indexing, so we break and reindex later
+                    break;
+                } else {
+                    // No valid child to select, treat as leaf
+                    break;
+                }
             } else {
+                // Found a leaf node (either unexpanded or terminal)
                 break;
             }
         }
         
+        // Navigate to the selected leaf node using the path
+        let mut current = &mut root;
+        for &idx in current_path.iter() {
+            current = &mut current.children[idx];
+        }
+        
         // Expansion phase
-        if !current_node.unexplored_moves.is_empty() && current_node.visits > 0 {
-            let random_index = thread_rng().gen_range(0..current_node.unexplored_moves.len());
-            let new_move = current_node.unexplored_moves.swap_remove(random_index);
+        if !current.unexplored_moves.is_empty() && current.visits > 0 {
+            // Expand the current node by adding a child
+            let random_index = thread_rng().gen_range(0..current.unexplored_moves.len());
+            let new_move = current.unexplored_moves.swap_remove(random_index);
             
-            let mut new_position = current_node.position.clone();
+            // Create a new position by applying the selected move
+            let mut new_position = current.position.clone();
             new_position.play_unchecked(&new_move);
             
-            let new_hash = context.current_hash; // Simplification, ideally update the hash
-            let new_child = MCTSNode::new(new_position, Some(new_move), new_hash);
-            current_node.children.push(new_child);
-            path.push(current_node);
-            current_node = path.last_mut().unwrap().children.last_mut().unwrap();
-            current_node.expand(context.opponent_drawback, context.player_drawback, 
-                              if context.player_turn == Color::White { Color::Black } else { Color::White });
+            // Create a new child node
+            let next_color = if player_turn == Color::White { Color::Black } else { Color::White };
+            let mut new_child = MCTSNode::new(new_position, Some(new_move), context.current_hash);
+            new_child.expand(context.opponent_drawback, context.player_drawback, next_color);
+            
+            // Add the new child to the current node
+            current.children.push(new_child);
+            
+            // Update current_path to include the new child
+            current_path.push(current.children.len() - 1);
+            
+            // Re-navigate to the new child node
+            current = &mut root;
+            for &idx in current_path.iter() {
+                current = &mut current.children[idx];
+            }
         }
         
         // Simulation phase
-        let mut simulation_position = current_node.position.clone();
-        let mut simulation_turn = if path.len() % 2 == 0 { context.player_turn } else {
-            if context.player_turn == Color::White { Color::Black } else { Color::White }
+        let mut simulation_position = current.position.clone();
+        
+        // Determine whose turn it is in the simulation
+        let mut simulation_turn = if current_path.len() % 2 == 0 { 
+            player_turn
+        } else {
+            if player_turn == Color::White { Color::Black } else { Color::White }
         };
         
         let mut depth = 0;
@@ -434,7 +476,7 @@ pub fn find_best_move_mcts(context: AiGameStateContext, iterations: u32) -> Opti
         
         while depth < max_depth {
             // Check if position is terminal
-            if let Some(outcome) = simulation_position.outcome() {
+            if simulation_position.outcome().is_some() {
                 break;
             }
             
@@ -471,13 +513,13 @@ pub fn find_best_move_mcts(context: AiGameStateContext, iterations: u32) -> Opti
         }
         
         // Evaluate the final position
-        let current_player_drawback = if simulation_turn == context.player_turn {
+        let current_player_drawback = if simulation_turn == player_turn {
             context.player_drawback
         } else {
             context.opponent_drawback
         };
         
-        let opponent_drawback = if simulation_turn == context.player_turn {
+        let opponent_drawback = if simulation_turn == player_turn {
             context.opponent_drawback
         } else {
             context.player_drawback
@@ -485,18 +527,16 @@ pub fn find_best_move_mcts(context: AiGameStateContext, iterations: u32) -> Opti
         
         let score = evaluate_position(&simulation_position, current_player_drawback, opponent_drawback, player_is_white);
         
-        // Backpropagation phase
-        for node in path.iter_mut().rev() {
-            for child in &mut node.children {
-                if child.visits > 0 {
-                    child.visits += 1;
-                    child.score += score;
-                }
-            }
-        }
+        // Backpropagation phase - update all nodes along the path
+        let mut current = &mut root;
+        current.visits += 1;
+        current.score += score;
         
-        current_node.visits += 1;
-        current_node.score += score;
+        for &idx in current_path.iter() {
+            current = &mut current.children[idx];
+            current.visits += 1;
+            current.score += score;
+        }
         
         completed_iterations += 1;
     }

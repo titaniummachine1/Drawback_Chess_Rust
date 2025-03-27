@@ -1,0 +1,17 @@
+{
+  "white_drawback": {
+    "name": "No Castling",
+    "index": null
+  },
+  "black_drawback": {
+    "name": "Pawns Advance One",
+    "index": null
+  },
+  "ai_settings": {
+    "iteration_limit": 1000,
+    "time_limit_ms": 3000,
+    "depth_limit": 4,
+    "check_quietness": true,
+    "quiescence_depth": 2
+  }
+} 
