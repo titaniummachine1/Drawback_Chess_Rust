@@ -17,6 +17,10 @@ pub struct ValidMoveDestination {
     pub chess_move: Move,
 }
 
+// Add a new component to differentiate selection highlights from move indicators
+#[derive(Component)]
+pub struct PieceSelectionHighlight;
+
 pub fn handle_piece_selection(
     mouse_button: Res<Input<MouseButton>>,
     windows: Query<&Window>,
@@ -28,6 +32,7 @@ pub fn handle_piece_selection(
     mut ev_make_move: EventWriter<MakeMoveEvent>,
     selected: Query<Entity, With<SelectedPiece>>,
     valid_moves: Query<(Entity, &ValidMoveDestination)>,
+    selection_highlights: Query<Entity, With<PieceSelectionHighlight>>,
 ) {
     // Only process clicks when it's the player's turn
     if !mouse_button.just_pressed(MouseButton::Left) {
@@ -59,7 +64,7 @@ pub fn handle_piece_selection(
                     clicked_on_valid_move = true;
                     
                     // Clear selection and valid moves
-                    clear_selection(&mut commands, &selected, &valid_moves);
+                    clear_selection(&mut commands, &selected, &valid_moves, &selection_highlights);
                     return;
                 }
             }
@@ -70,7 +75,7 @@ pub fn handle_piece_selection(
             // 3. Clicking on the currently selected piece (deselect)
             
             // Always clear the current selection first
-            clear_selection(&mut commands, &selected, &valid_moves);
+            clear_selection(&mut commands, &selected, &valid_moves, &selection_highlights);
             
             // Now check if we're clicking on a friendly piece to select it
             let mut found_friendly_piece = false;
@@ -83,6 +88,18 @@ pub fn handle_piece_selection(
                     commands.entity(entity).insert(SelectedPiece);
                     found_friendly_piece = true;
                     
+                    // Calculate the piece's file and rank
+                    let file = piece.pos.file().char() as u8 - b'a';
+                    let rank = piece.pos.rank().char() as u8 - b'1';
+                    
+                    // Calculate highlight position based on board orientation
+                    let highlight_pos = calculate_highlight_position(
+                        file as usize,
+                        rank as usize,
+                        Z_HIGHLIGHT,
+                        game_state.board_flipped
+                    );
+                    
                     // Spawn a highlight sprite for the selected piece
                     commands.spawn((
                         SpriteBundle {
@@ -91,16 +108,10 @@ pub fn handle_piece_selection(
                                 custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
                                 ..default()
                             },
-                            transform: Transform::from_translation(
-                                Vec3::new(
-                                    ((piece.pos.file().char() as u8 - b'a') as f32 - 3.5) * TILE_SIZE,
-                                    ((7 - (piece.pos.rank().char() as u8 - b'1')) as f32 - 3.5) * TILE_SIZE,
-                                    Z_HIGHLIGHT,
-                                )
-                            ),
+                            transform: Transform::from_translation(highlight_pos),
                             ..default()
                         },
-                        SelectedPiece, // Tag with same component so it gets cleaned up
+                        PieceSelectionHighlight, // Use the new component for selection highlights
                     ));
                     
                     // Find and display valid moves for this piece
@@ -124,7 +135,7 @@ pub fn handle_piece_selection(
         } else {
             println!("No board square found under click");
             // Click is outside the board, clear selection
-            clear_selection(&mut commands, &selected, &valid_moves);
+            clear_selection(&mut commands, &selected, &valid_moves, &selection_highlights);
         }
     }
 }
@@ -134,15 +145,23 @@ fn clear_selection(
     commands: &mut Commands,
     selected: &Query<Entity, With<SelectedPiece>>,
     valid_moves: &Query<(Entity, &ValidMoveDestination)>,
+    selection_highlights: &Query<Entity, With<PieceSelectionHighlight>>,
 ) {
-    // Remove the SelectedPiece component from all entities
+    // Remove the SelectedPiece component from actual pieces
     for entity in selected.iter() {
-        commands.entity(entity).remove::<SelectedPiece>();
+        if !valid_moves.iter().any(|(e, _)| e == entity) {
+            commands.entity(entity).remove::<SelectedPiece>();
+        }
+    }
+    
+    // Despawn all selection highlights
+    for entity in selection_highlights.iter() {
+        commands.entity(entity).despawn_recursive();
     }
     
     // Despawn all valid move indicators
     for (entity, _) in valid_moves.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).despawn_recursive();
     }
 }
 
@@ -190,6 +209,25 @@ fn find_closest_board_square(
     closest_square
 }
 
+// Add a helper function to calculate visual positions based on board orientation
+fn calculate_highlight_position(file: usize, rank: usize, z: f32, board_flipped: bool) -> Vec3 {
+    if board_flipped {
+        // Flipped board (white at top)
+        Vec3::new(
+            (file as f32 - 3.5) * TILE_SIZE,
+            (rank as f32 - 3.5) * TILE_SIZE,
+            z
+        )
+    } else {
+        // Standard board (white at bottom)
+        Vec3::new(
+            (file as f32 - 3.5) * TILE_SIZE,
+            ((7 - rank) as f32 - 3.5) * TILE_SIZE,
+            z
+        )
+    }
+}
+
 // Helper function to display valid moves for a selected piece
 fn display_valid_moves(
     commands: &mut Commands,
@@ -224,7 +262,7 @@ fn display_valid_moves(
                          from_square, to_square, piece_color, piece_role);
                 
                 // Find the board square entity for the destination
-                for (transform, board_square) in board_squares.iter() {
+                for (_, board_square) in board_squares.iter() {
                     if board_square.square == to_square {
                         // Determine if this is a capture move
                         let is_capture = match game_state.board.board().piece_at(to_square) {
@@ -232,20 +270,25 @@ fn display_valid_moves(
                             None => false
                         };
                         
-                        // Set up position for the indicator
-                        let position = Vec3::new(
-                            transform.translation.x,
-                            transform.translation.y,
-                            Z_LEGAL_MOVES // Use the proper z-index
+                        // Calculate file and rank for the destination square
+                        let file = to_square.file().char() as u8 - b'a';
+                        let rank = to_square.rank().char() as u8 - b'1';
+                        
+                        // Set up position for the indicator based on board orientation
+                        let position = calculate_highlight_position(
+                            file as usize, 
+                            rank as usize, 
+                            Z_LEGAL_MOVES,
+                            game_state.board_flipped
                         );
                         
                         if is_capture {
-                            // For captures, create a hollow circle (ring)
+                            // For captures, create a red circle indicator (capture)
                             commands.spawn((
                                 SpriteBundle {
                                     sprite: Sprite {
-                                        color: Color::rgba(0.9, 0.2, 0.2, 0.6), // Red for captures
-                                        custom_size: Some(Vec2::new(TILE_SIZE * 0.5, TILE_SIZE * 0.5)),
+                                        color: Color::rgba(0.9, 0.2, 0.2, 0.7), // Bright red for captures
+                                        custom_size: Some(Vec2::new(TILE_SIZE * 0.4, TILE_SIZE * 0.4)),
                                         ..default()
                                     },
                                     transform: Transform::from_translation(position),
@@ -254,11 +297,11 @@ fn display_valid_moves(
                                 ValidMoveDestination { chess_move: chess_move.clone() },
                             ));
                         } else {
-                            // For regular moves, create a solid circle
+                            // For regular moves, create a smaller green circle
                             commands.spawn((
                                 SpriteBundle {
                                     sprite: Sprite {
-                                        color: Color::rgba(0.2, 0.8, 0.2, 0.5), // Green for regular moves
+                                        color: Color::rgba(0.2, 0.8, 0.2, 0.7), // Bright green for regular moves
                                         custom_size: Some(Vec2::new(TILE_SIZE * 0.3, TILE_SIZE * 0.3)),
                                         ..default()
                                     },

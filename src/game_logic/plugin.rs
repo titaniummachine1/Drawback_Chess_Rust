@@ -3,6 +3,7 @@ use shakmaty::{fen::Fen, Chess, Color, Role, Move, CastlingMode, Position, Setup
 use crate::drawbacks::DrawbackId;
 use crate::config::GameConfig;
 use crate::drawbacks::registry::DrawbackRegistry;
+use crate::constants::DEFAULT_BOARD_FLIPPED;
 use super::state::{GameState, TurnState, GameStatus};
 use super::systems::apply_move;
 use super::events::{MakeMoveEvent, GameOverEvent};
@@ -57,6 +58,7 @@ fn init_game_state(
         zobrist_hash: 0,  // Will be initialized properly
         status: GameStatus::Ongoing,
         current_turn_rng_outcome: None,
+        board_flipped: DEFAULT_BOARD_FLIPPED,
     };
 
     // Update the zobrist hash with the initial position

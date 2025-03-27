@@ -7,6 +7,7 @@ use crate::game_logic::state::{GameState, TurnState};
 use crate::game_logic::events::MakeMoveEvent;
 use crate::drawbacks::{DrawbackRegistry, DrawbackId};
 use crate::config::GameConfig;
+use crate::constants::DEFAULT_BOARD_FLIPPED;
 use super::components::AiThinking;
 use super::mcts::find_best_move_mcts;
 
@@ -78,6 +79,7 @@ fn request_ai_move(
             black_drawback: game_state.black_drawback,
             current_turn_rng_outcome: game_state.current_turn_rng_outcome,
             zobrist_hash: game_state.zobrist_hash,
+            board_flipped: game_state.board_flipped,
         };
 
         // Determine current player and opponent drawback IDs

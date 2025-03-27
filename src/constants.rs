@@ -13,9 +13,9 @@ pub const TILE_SIZE: f32 = 80.0;
 // Size of the whole board in pixels
 pub const BOARD_SIZE_PX: f32 = TILE_SIZE * NUM_COLS as f32;
 
-// Colors for the chess board
-pub const WHITE_SQUARE_COLOR: Color = Color::rgb(0.93, 0.79, 0.69); // Light brown
-pub const BLACK_SQUARE_COLOR: Color = Color::rgb(0.46, 0.33, 0.28); // Dark brown
+// Colors for the chess board (made more contrasting)
+pub const WHITE_SQUARE_COLOR: Color = Color::rgb(0.93, 0.85, 0.73); // Light cream
+pub const BLACK_SQUARE_COLOR: Color = Color::rgb(0.36, 0.25, 0.20); // Darker brown
 
 // Colors for piece selection and move highlighting
 pub const SELECTED_COLOR: Color = Color::rgba(0.0, 0.5, 1.0, 0.5);  // Blue, semi-transparent
@@ -29,6 +29,9 @@ pub const Z_LEGAL_MOVES: f32 = 0.2; // Legal move indicators
 pub const Z_PIECES: f32 = 0.3;     // Chess pieces
 pub const Z_UI_ELEMENTS: f32 = 0.4; // UI elements like promotion options
 pub const Z_DRAGGING: f32 = 0.5;   // Pieces while being dragged
+
+// Default board orientation - white at bottom (false)
+pub const DEFAULT_BOARD_FLIPPED: bool = false;
 
 // These colors are defined for potential future use
 // pub const ACTIVE_COLOR: Color = Color::rgba(0.0, 1.0, 0.0, 0.7);

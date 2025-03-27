@@ -1,9 +1,10 @@
 use bevy::prelude::*;
-use shakmaty::{Color as ChessColor, Role, Square, Position, Move};
+use shakmaty::{Square, Color as ChessColor, Role, Chess, Position, Move, File};
 use crate::constants::{TILE_SIZE, Z_PIECES, Z_UI_ELEMENTS};
 use crate::game_logic::state::{GameState, TurnState};
 use crate::game_logic::events::MakeMoveEvent;
 use super::components::Piece;
+use bevy::render::texture::Image;
 
 // Component for promotion UI
 #[derive(Component)]
@@ -148,9 +149,9 @@ fn screen_to_world(
 pub fn update_piece_positions(
     mut commands: Commands,
     mut pieces: Query<(Entity, &mut Piece, &mut Transform)>,
+    asset_server: Res<AssetServer>,
     mut ev_make_move: EventReader<MakeMoveEvent>,
     game_state: Res<GameState>,
-    asset_server: Res<AssetServer>,
     current_state: Res<State<TurnState>>,
 ) {
     for ev in ev_make_move.read() {
@@ -214,25 +215,34 @@ pub fn update_piece_positions(
                             };
                             
                             let image_path = format!("images/{}{}.png", color_prefix, role_suffix);
-                            // We need to update the texture, but this requires more complex handling
-                            // For now, we'll despawn and respawn the piece
-                            commands.entity(entity).despawn();
-                            spawn_single_piece(&mut commands, &asset_server, *to, piece.color, *promotion_role);
-                            found = true;
-                            break;
+                            
+                            // We need to update the texture
+                            commands.entity(entity).insert(
+                                asset_server.load::<Image>(image_path)
+                            );
                         }
                         
-                        // Update its visual position
+                        // Update its visual position based on the board orientation
                         let file = to.file().char() as u8 - b'a';
                         let rank = to.rank().char() as u8 - b'1';
                         
-                        let new_position = Vec3::new(
-                            (file as f32 - 3.5) * TILE_SIZE,
-                            ((7 - rank) as f32 - 3.5) * TILE_SIZE,
-                            0.1
-                        );
+                        let position = if game_state.board_flipped {
+                            // Flipped board (white at top)
+                            Vec3::new(
+                                (file as f32 - 3.5) * TILE_SIZE,
+                                (rank as f32 - 3.5) * TILE_SIZE,
+                                Z_PIECES
+                            )
+                        } else {
+                            // Standard board (white at bottom)
+                            Vec3::new(
+                                (file as f32 - 3.5) * TILE_SIZE,
+                                ((7 - rank) as f32 - 3.5) * TILE_SIZE,
+                                Z_PIECES
+                            )
+                        };
+                        transform.translation = position;
                         
-                        transform.translation = new_position;
                         found = true;
                         break;
                     }
@@ -262,13 +272,22 @@ pub fn update_piece_positions(
                         let file = to.file().char() as u8 - b'a';
                         let rank = to.rank().char() as u8 - b'1';
                         
-                        let new_position = Vec3::new(
-                            (file as f32 - 3.5) * TILE_SIZE,
-                            ((7 - rank) as f32 - 3.5) * TILE_SIZE,
-                            0.1
-                        );
-                        
-                        transform.translation = new_position;
+                        let position = if game_state.board_flipped {
+                            // Flipped board (white at top)
+                            Vec3::new(
+                                (file as f32 - 3.5) * TILE_SIZE,
+                                (rank as f32 - 3.5) * TILE_SIZE,
+                                Z_PIECES
+                            )
+                        } else {
+                            // Standard board (white at bottom)
+                            Vec3::new(
+                                (file as f32 - 3.5) * TILE_SIZE,
+                                ((7 - rank) as f32 - 3.5) * TILE_SIZE,
+                                Z_PIECES
+                            )
+                        };
+                        transform.translation = position;
                         break;
                     }
                 }
@@ -276,53 +295,98 @@ pub fn update_piece_positions(
             
             // Handle castling
             shakmaty::Move::Castle { king, rook } => {
-                // Calculate new positions for king and rook
-                let king_to = if *rook > *king { 
-                    Square::from_coords(rook.file().offset(-1).unwrap(), king.rank()) // King moves right
-                } else {
-                    Square::from_coords(rook.file().offset(1).unwrap(), king.rank()) // King moves left
-                };
-                
-                let rook_to = if *rook > *king {
-                    Square::from_coords(king.file().offset(1).unwrap(), king.rank()) // Rook moves left
-                } else {
-                    Square::from_coords(king.file().offset(-1).unwrap(), king.rank()) // Rook moves right
-                };
-                
-                // Move the king
+                // Handle each piece involved in castling separately
+                // First the king
                 for (_, mut piece, mut transform) in pieces.iter_mut() {
-                    if piece.pos == *king && piece.role == Role::King {
+                    if piece.role == Role::King && piece.pos == *king {
+                        // King's final destination is stored in the move
+                        let king_to = chess_move.to();
+                        
+                        // Update king position
                         piece.pos = king_to;
                         
+                        // Update its visual position
                         let file = king_to.file().char() as u8 - b'a';
                         let rank = king_to.rank().char() as u8 - b'1';
                         
-                        let new_position = Vec3::new(
-                            (file as f32 - 3.5) * TILE_SIZE,
-                            ((7 - rank) as f32 - 3.5) * TILE_SIZE,
-                            0.1
-                        );
+                        if game_state.board_flipped {
+                            transform.translation = Vec3::new(
+                                (file as f32 - 3.5) * TILE_SIZE,
+                                (rank as f32 - 3.5) * TILE_SIZE,
+                                Z_PIECES
+                            );
+                        } else {
+                            transform.translation = Vec3::new(
+                                (file as f32 - 3.5) * TILE_SIZE,
+                                ((7 - rank) as f32 - 3.5) * TILE_SIZE,
+                                Z_PIECES
+                            );
+                        }
                         
-                        transform.translation = new_position;
+                        println!("Castling: moved king from {:?} to {:?}", *king, king_to);
                         break;
                     }
                 }
                 
-                // Move the rook
+                // Then the rook - find the correct rook based on board position
+                // The rook must be in one of the corner positions of the correct color
+                let king_rank = king.rank();
+                let is_kingside_castle = chess_move.to().file() > king.file();
+                
+                let rook_square = if is_kingside_castle {
+                    // Kingside castle - rook is on the H file (rightmost)
+                    Square::from_coords(File::H, king_rank)
+                } else {
+                    // Queenside castle - rook is on the A file (leftmost)
+                    Square::from_coords(File::A, king_rank)
+                };
+                
+                // Calculate the rook's destination square
+                let rook_to = if is_kingside_castle {
+                    // For kingside castle, rook moves to king's left
+                    let file_char = (chess_move.to().file().char() as u8 - 1) as char;
+                    Square::from_coords(
+                        File::from_char(file_char).unwrap(),
+                        king_rank
+                    )
+                } else {
+                    // For queenside castle, rook moves to king's right
+                    let file_char = (chess_move.to().file().char() as u8 + 1) as char;
+                    Square::from_coords(
+                        File::from_char(file_char).unwrap(),
+                        king_rank
+                    )
+                };
+                
+                // Update the rook
                 for (_, mut piece, mut transform) in pieces.iter_mut() {
-                    if piece.pos == *rook && piece.role == Role::Rook {
+                    if piece.role == Role::Rook && piece.pos == rook_square {
+                        // Store original position for logging
+                        let rook_from = piece.pos;
+                        
+                        // Update the rook's position
                         piece.pos = rook_to;
                         
+                        // Update visual position
                         let file = rook_to.file().char() as u8 - b'a';
                         let rank = rook_to.rank().char() as u8 - b'1';
                         
-                        let new_position = Vec3::new(
-                            (file as f32 - 3.5) * TILE_SIZE,
-                            ((7 - rank) as f32 - 3.5) * TILE_SIZE,
-                            0.1
-                        );
+                        // Update visual position based on board orientation
+                        if game_state.board_flipped {
+                            transform.translation = Vec3::new(
+                                (file as f32 - 3.5) * TILE_SIZE,
+                                (rank as f32 - 3.5) * TILE_SIZE,
+                                Z_PIECES
+                            );
+                        } else {
+                            transform.translation = Vec3::new(
+                                (file as f32 - 3.5) * TILE_SIZE,
+                                ((7 - rank) as f32 - 3.5) * TILE_SIZE,
+                                Z_PIECES
+                            );
+                        }
                         
-                        transform.translation = new_position;
+                        println!("Castling: moved rook from {:?} to {:?}", rook_from, rook_to);
                         break;
                     }
                 }

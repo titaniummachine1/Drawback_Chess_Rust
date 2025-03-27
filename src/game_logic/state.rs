@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use shakmaty::{Chess, Color as ChessColor, Position, CastlingMode};
 use crate::drawbacks::registry::DrawbackId; // Use the ID enum
+use crate::constants::DEFAULT_BOARD_FLIPPED;
 use std::error::Error;
 
 // Represents the overall status of the game
@@ -34,6 +35,11 @@ pub struct GameState {
      // Placeholder: A proper Zobrist hash implementation is complex.
      // Add a field to store the hash, calculated elsewhere.
      pub zobrist_hash: u64, // The hash representing the current state
+     
+     // --- Board Orientation ---
+     // If true, board is flipped (white pieces at top)
+     // If false, board is in standard orientation (white pieces at bottom)
+     pub board_flipped: bool,
 
      // Add history Vec<MoveInfo> etc. later if needed
 }
@@ -50,6 +56,7 @@ impl Default for GameState {
             black_drawback: DrawbackId::None, // Start with no drawback
             current_turn_rng_outcome: None,
             zobrist_hash: 0, // Initialize hash (will be calculated properly)
+            board_flipped: DEFAULT_BOARD_FLIPPED,
         }
     }
 }
@@ -80,6 +87,7 @@ impl GameState {
             black_drawback: DrawbackId::None,
             current_turn_rng_outcome: None,
             zobrist_hash: 0,
+            board_flipped: DEFAULT_BOARD_FLIPPED,
         })
     }
 } 
