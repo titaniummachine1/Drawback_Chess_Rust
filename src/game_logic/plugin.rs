@@ -1,51 +1,74 @@
 use bevy::prelude::*;
-use super::events::{MakeMoveEvent, GameOverEvent};
-use super::state::{GameState, TurnState}; // Import GameState
+use shakmaty::{fen::Fen, Chess, Color, CastlingMode, Position, Setup};
+use crate::drawbacks::DrawbackId;
+use crate::config::GameConfig;
+use crate::drawbacks::registry::DrawbackRegistry;
+use super::state::{GameState, TurnState, GameStatus};
 use super::systems::apply_move;
+use super::events::{MakeMoveEvent, GameOverEvent};
 
 pub struct GameLogicPlugin;
 
-// Standard chess starting position FEN
-const STANDARD_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+/// The standard chess starting position FEN (including castling rights)
+pub const STANDARD_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-// For flipped board (black at bottom)
-const FLIPPED_FEN: &str = "RNBQKBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbqkbnr w KQkq - 0 1";
-
-// Initialize game with standard FEN - white at bottom, black at top
-fn init_game_state(mut commands: Commands) {
-    match GameState::from_fen(STANDARD_FEN) {
-        Ok(state) => {
-            println!("Initialized chess board with standard FEN (white at bottom)");
-            commands.insert_resource(state);
-        },
-        Err(err) => {
-            println!("Error initializing from FEN: {:?}, using default", err);
-            commands.init_resource::<GameState>();
-        }
-    }
-}
+/// The flipped chess starting position FEN (black at bottom, white at top)
+pub const FLIPPED_FEN: &str = "RNBQKBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbqkbnr w KQkq - 0 1";
 
 impl Plugin for GameLogicPlugin {
     fn build(&self, app: &mut App) {
-        // --- Resources ---
-        // GameState initialized here with defaults
-        app.init_resource::<GameState>();
-
-        // --- States ---
-        app.init_state::<TurnState>();
-
-        // --- Events ---
-        app.add_event::<MakeMoveEvent>();
-        app.add_event::<GameOverEvent>();
-
-        // --- Initialize Game State ---
-        app.add_systems(Startup, init_game_state);
-
-        // --- Systems ---
-        // Apply moves when event occurs
-        app.add_systems(Update, apply_move.run_if(on_event::<MakeMoveEvent>()));
-
-        // System to handle GameOverEvent (Placeholder)
-        // app.add_systems(OnEnter(TurnState::GameOver), handle_game_over_display);
+        app
+            .init_state::<TurnState>()
+            .add_event::<MakeMoveEvent>()
+            .add_event::<GameOverEvent>()
+            .add_systems(Startup, init_game_state)
+            .add_systems(
+                Update,
+                apply_move.run_if(in_state(TurnState::PlayerTurn))
+            );
     }
+}
+
+/// Initialize the game state with the starting position and turn
+fn init_game_state(
+    mut commands: Commands,
+    config: Res<GameConfig>,
+    drawback_registry: Res<DrawbackRegistry>,
+) {
+    // Parse the standard chess position FEN
+    let fen = Fen::from_ascii(FLIPPED_FEN.as_bytes()).expect("Valid FEN");
+    let chess: Chess = fen.into_position(CastlingMode::Standard).expect("Valid position");
+    
+    // Initialize the GameState with default drawbacks from config
+    let white_drawback_id = config.resolve_drawback_id(&config.white_drawback);
+    let black_drawback_id = config.resolve_drawback_id(&config.black_drawback);
+    
+    println!("Initializing game with drawbacks - White: {:?}, Black: {:?}", 
+             white_drawback_id, black_drawback_id);
+    
+    // Initialize and insert the GameState resource
+    let mut game_state = GameState {
+        board: chess,
+        current_player_turn: Color::White,
+        white_drawback: white_drawback_id,
+        black_drawback: black_drawback_id,
+        zobrist_hash: 0,  // Will be initialized properly
+        status: GameStatus::Ongoing,
+        current_turn_rng_outcome: None,
+    };
+
+    // Update the zobrist hash with the initial position
+    let hash = crate::ai::zobrist::calculate_zobrist_hash(&game_state.board);
+    game_state.zobrist_hash = hash;
+    
+    // Insert the initialized GameState as a resource
+    commands.insert_resource(game_state);
+}
+
+// Check if a move captures the king (used for Drawback Chess win condition)
+pub fn is_king_capture(board: &Chess, game_move: &Move) -> bool {
+    if let Some(piece) = board.board().piece_at(game_move.to()) {
+        return piece.role == Role::King;
+    }
+    false
 } 

@@ -1,10 +1,12 @@
 use bevy::prelude::*;
 use bevy::tasks::AsyncComputeTaskPool;
 use futures_lite::future;
+use std::time::Duration;
 use shakmaty::{Chess, Color as ChessColor};
 use crate::game_logic::state::{GameState, TurnState};
 use crate::game_logic::events::MakeMoveEvent;
 use crate::drawbacks::{DrawbackRegistry, DrawbackId};
+use crate::config::GameConfig;
 use super::components::AiThinking;
 use super::mcts::find_best_move_mcts;
 
@@ -29,11 +31,14 @@ pub struct AiGameStateContext {
     pub player_drawback: DrawbackId,
     pub opponent_drawback: DrawbackId,
     pub current_hash: u64,
-    pub depth: u8, // Search depth limit
+    pub depth: u8,              // Search depth limit
+    pub check_quietness: bool,  // Whether to ensure positions are quiet
+    pub quiescence_depth: u8,   // Extra depth for non-quiet positions
+    pub time_limit_ms: u32,     // Time limit in milliseconds
 }
 
 impl AiGameStateContext {
-    pub fn from_game_state(game_state: &GameState) -> Self {
+    pub fn from_game_state(game_state: &GameState, config: &GameConfig) -> Self {
         Self {
             board: game_state.board.clone(),
             player_turn: game_state.current_player_turn,
@@ -43,7 +48,10 @@ impl AiGameStateContext {
                 ChessColor::Black => game_state.white_drawback,
             },
             current_hash: game_state.zobrist_hash,
-            depth: 3, // Default search depth
+            depth: config.ai_settings.depth_limit,
+            check_quietness: config.ai_settings.check_quietness,
+            quiescence_depth: config.ai_settings.quiescence_depth,
+            time_limit_ms: config.ai_settings.time_limit_ms,
         }
     }
 }
@@ -52,6 +60,7 @@ impl AiGameStateContext {
 fn request_ai_move(
     mut commands: Commands,
     game_state: Res<GameState>,
+    config: Res<GameConfig>,
     drawback_registry: Res<DrawbackRegistry>,
     q_ai_task: Query<&AiThinking>,
 ) {
@@ -81,11 +90,11 @@ fn request_ai_move(
         };
 
         // Prepare data for the async task
-        let ai_context = AiGameStateContext::from_game_state(&game_state);
+        let ai_context = AiGameStateContext::from_game_state(&game_state, &config);
+        let iterations = config.ai_settings.iteration_limit;
 
         // Spawn the Async Task
         let task = thread_pool.spawn(async move {
-            let iterations = 1000; // Example MCTS iterations
             find_best_move_mcts(ai_context, iterations)
         });
 
@@ -109,7 +118,7 @@ fn check_ai_move_result(
             } else {
                  eprintln!("AI task finished but returned no move. Game state might be terminal.");
             }
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
             println!("Despawned AI task entity.");
             break;
         }

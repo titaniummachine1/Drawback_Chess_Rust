@@ -9,6 +9,7 @@ mod input;
 mod ai;
 mod ui;
 mod drawbacks; // Import the drawbacks module
+mod config; // Import the configuration module
 // The images directory contains assets, not Rust code, so no need to import it as a module
 
 // Use module plugins
@@ -19,6 +20,7 @@ use input::plugin::InputPlugin;
 use ai::{AiPlugin, ZobristPlugin}; // Import Zobrist from AI
 use ui::plugin::UiPlugin;
 use drawbacks::DrawbacksPlugin; // Use the drawbacks plugin (registers rules)
+use config::ConfigPlugin; // Use the config plugin
 
 fn main() {
     // Make sure the window is large enough to show the entire board
@@ -41,20 +43,22 @@ fn main() {
              ..default()
         }))
         // --- Plugin Ordering ---
-        // 1. Register Drawback Rules First (Needed by GameState/Logic)
+        // 1. Configuration Plugin (needs to be first to properly set up config)
+        .add_plugins(ConfigPlugin)
+        // 2. Register Drawback Rules (Needed by GameState/Logic)
         .add_plugins(DrawbacksPlugin)
-        // 2. Core Logic (incl. GameState, Events)
+        // 3. Core Logic (incl. GameState, Events)
         .add_plugins(GameLogicPlugin) // Initializes GameState, schedules apply_move
-        // 3. Zobrist Hashing (after GameState)
+        // 4. Zobrist Hashing (after GameState)
         .add_plugins(ZobristPlugin) // Initialize Zobrist keys from AI module
-        // 4. Visual Setup
+        // 5. Visual Setup
         .add_plugins(BoardPlugin)
         .add_plugins(PiecesPlugin) // Spawns pieces based on initial GameState
-        // 5. UI Setup
+        // 6. UI Setup
         .add_plugins(UiPlugin)
-        // 6. Input Handling (Needs board/pieces/GameState)
+        // 7. Input Handling (Needs board/pieces/GameState)
         .add_plugins(InputPlugin)
-        // 7. AI Logic (Needs GameState, DrawbackRegistry)
+        // 8. AI Logic (Needs GameState, DrawbackRegistry)
         .add_plugins(AiPlugin)
         .run();
 } 
