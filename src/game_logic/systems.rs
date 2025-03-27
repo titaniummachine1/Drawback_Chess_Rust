@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use shakmaty::{Color as ChessColor, Position, Role, Square, Move};
 use crate::game_logic::state::{GameState, TurnState, GameStatus};
 use crate::game_logic::events::{MakeMoveEvent, GameOverEvent};
+use crate::drawbacks::{DrawbackRegistry, DrawbackId};
 
 /// Check if a move captures the king (Drawback Chess win condition)
 fn is_king_capture(board: &shakmaty::Chess, m: &Move) -> bool {
@@ -19,6 +20,7 @@ pub fn apply_move(
     mut game_state: ResMut<GameState>,
     mut next_state: ResMut<NextState<TurnState>>,
     current_state: Res<State<TurnState>>,
+    drawback_registry: Res<DrawbackRegistry>,
 ) {
     for ev in ev_make_move.read() {
         let move_to_make = ev.0.clone();
@@ -35,11 +37,30 @@ pub fn apply_move(
             continue;
         }
         
-        // Check if move is legal
-        let legal_moves = game_state.board.legal_moves();
-        println!("Available legal moves: {}", legal_moves.len());
+        // Check if move is legal ignoring check constraints (for Drawback Chess)
+        let mut legal_moves = game_state.board.legal_moves();
         
-        if !legal_moves.contains(&move_to_make) {
+        // Validate move against player's drawback constraints
+        let player_drawback_id = game_state.get_current_player_drawback_id();
+        if player_drawback_id != DrawbackId::None {
+            if let Some(drawback_rule) = drawback_registry.rules.get(&player_drawback_id) {
+                // Filter moves according to this player's drawback
+                let moves_vec: Vec<Move> = legal_moves.into_iter().collect();
+                legal_moves = drawback_rule.filter_pseudo_legal_moves(
+                    &game_state.board,
+                    moves_vec,
+                    game_state.current_turn_rng_outcome
+                ).into_iter().collect();
+                println!("After applying drawback: {} legal moves", legal_moves.len());
+            }
+        }
+        
+        // In Drawback Chess, you're allowed to move into check if opponent's drawback prevents capture
+        // For simplicity, we'll check if the move is in our legal moves list
+        let move_is_allowed = legal_moves.contains(&move_to_make) || 
+                              is_allowable_check_move(&game_state, &move_to_make);
+        
+        if !move_is_allowed {
             println!("!!! ILLEGAL MOVE ATTEMPTED: {:?}", move_to_make);
             continue;
         }
@@ -47,7 +68,21 @@ pub fn apply_move(
         println!("*** LEGAL MOVE CONFIRMED: {:?}", move_to_make);
         
         // Log the move
-        let from_square = move_to_make.from().unwrap_or(Square::A1); // Some special moves might not have from square
+        if let Some(from_square) = move_to_make.from() {
+            println!("Updating piece positions for move: {:?} ", move_to_make);
+            
+            // Verify the source square has a piece of the correct color
+            if let Some(piece) = game_state.board.board().piece_at(from_square) {
+                if piece.color != game_state.current_player_turn {
+                    println!("!!! WRONG COLOR PIECE MOVE ATTEMPTED: {:?}", move_to_make);
+                    continue;
+                }
+            } else {
+                println!("Warning: Couldn't find piece at source square {:?}", from_square);
+                continue;
+            }
+        }
+        
         let to_square = move_to_make.to();
         
         // Check for capture - flag captures for future AI evaluation
@@ -55,9 +90,13 @@ pub fn apply_move(
             Some(_) => true, // Destination square has a piece (standard capture)
             None => {
                 // Check for en passant capture
-                if let Some(piece) = game_state.board.board().piece_at(from_square) {
-                    if piece.role == Role::Pawn && from_square.file() != to_square.file() {
-                        true // Pawn moving diagonally without a piece at destination is en passant
+                if let Some(from_square) = move_to_make.from() {
+                    if let Some(piece) = game_state.board.board().piece_at(from_square) {
+                        if piece.role == Role::Pawn && from_square.file() != to_square.file() {
+                            true // Pawn moving diagonally without a piece at destination is en passant
+                        } else {
+                            false
+                        }
                     } else {
                         false
                     }
@@ -114,6 +153,22 @@ pub fn apply_move(
             }
         }
     }
+}
+
+/// Helper function to determine if a move into check might be allowable in Drawback Chess
+/// based on opponent's potential drawback that might prevent king capture
+fn is_allowable_check_move(game_state: &GameState, candidate_move: &Move) -> bool {
+    // This is a simplified version - a full implementation would:
+    // 1. Apply the move to a temporary board state
+    // 2. Look ahead to see if the opponent would be able to capture the king
+    // 3. Check the opponent's drawback to see if it blocks them from capturing the king
+    // 
+    // For now, we'll be conservative and not allow obviously illegal moves
+    // In a complete implementation, we would need the opponent's drawback rule
+    // to determine if king capture is prevented
+    
+    // Default implementation - be conservative, requiring strict legality
+    false
 }
 
 // ... existing code ...

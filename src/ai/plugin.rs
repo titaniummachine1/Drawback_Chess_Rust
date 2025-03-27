@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::tasks::AsyncComputeTaskPool;
 use futures_lite::future;
 use std::time::Duration;
-use shakmaty::{Chess, Color as ChessColor};
+use shakmaty::{Chess, Color as ChessColor, Move, Position};
 use crate::game_logic::state::{GameState, TurnState};
 use crate::game_logic::events::MakeMoveEvent;
 use crate::drawbacks::{DrawbackRegistry, DrawbackId};
@@ -119,19 +119,75 @@ fn check_ai_move_result(
     mut commands: Commands,
     mut task_q: Query<(Entity, &mut AiThinking)>,
     mut ev_make_move: EventWriter<MakeMoveEvent>,
+    game_state: Res<GameState>,
 ) {
     for (entity, mut ai_task) in task_q.iter_mut() {
         if let Some(result_move) = future::block_on(future::poll_once(&mut ai_task.0)) {
             println!("AI calculation task finished.");
             if let Some(ai_move) = result_move {
-                 println!("AI requests move: {:?}", ai_move);
-                 ev_make_move.send(MakeMoveEvent(ai_move));
+                // Validate the move before sending it
+                let is_valid = validate_ai_move(&game_state, &ai_move);
+                
+                if is_valid {
+                    println!("AI requests move: {:?}", ai_move);
+                    ev_make_move.send(MakeMoveEvent(ai_move));
+                } else {
+                    eprintln!("AI requested invalid move: {:?}, ignoring it", ai_move);
+                    // Get a fallback move from legal moves if the AI's choice is invalid
+                    if let Some(fallback_move) = get_fallback_move(&game_state) {
+                        println!("Using fallback move instead: {:?}", fallback_move);
+                        ev_make_move.send(MakeMoveEvent(fallback_move));
+                    } else {
+                        eprintln!("No valid moves available. Game might be in a terminal state.");
+                    }
+                }
             } else {
-                 eprintln!("AI task finished but returned no move. Game state might be terminal.");
+                eprintln!("AI task finished but returned no move. Game state might be terminal.");
             }
             commands.entity(entity).despawn();
             println!("Despawned AI task entity.");
             break;
         }
     }
+}
+
+/// Validate that an AI move is valid for the current game state
+fn validate_ai_move(game_state: &GameState, ai_move: &Move) -> bool {
+    // Check if the move is in the legal moves list
+    let legal_moves = game_state.board.legal_moves();
+    if !legal_moves.contains(ai_move) {
+        println!("Move is not in legal moves list");
+        return false;
+    }
+    
+    // For normal moves, check that the source square has a piece of the correct color
+    if let Some(from_square) = ai_move.from() {
+        if let Some(piece) = game_state.board.board().piece_at(from_square) {
+            if piece.color != game_state.current_player_turn {
+                println!("Source square has piece of wrong color");
+                return false;
+            }
+        } else {
+            println!("Warning: Couldn't find piece at source square {:?}", from_square);
+            return false;
+        }
+    }
+    
+    // Additional drawback-specific validation could be added here
+    // For now, we trust the basic legality check from shakmaty
+    
+    true
+}
+
+/// Get a simple fallback move when the AI's chosen move is invalid
+fn get_fallback_move(game_state: &GameState) -> Option<Move> {
+    let legal_moves = game_state.board.legal_moves();
+    if legal_moves.is_empty() {
+        return None;
+    }
+    
+    // Get the first legal move as a fallback
+    // In a more sophisticated implementation, we might rank moves by simple heuristics
+    let legal_moves_vec: Vec<Move> = legal_moves.into_iter().collect();
+    legal_moves_vec.first().cloned()
 } 

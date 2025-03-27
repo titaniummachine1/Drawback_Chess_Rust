@@ -195,93 +195,89 @@ fn display_valid_moves(
     commands: &mut Commands,
     game_state: &GameState,
     from_square: Square,
-    _color: ChessColor,
-    _role: Role,
+    piece_color: ChessColor,
+    piece_role: Role,
     board_squares: &Query<(&Transform, &BoardSquare)>,
 ) {
+    // Get all legal moves for the current game state
     let legals = game_state.board.legal_moves();
-    println!("Found {} legal moves in total", legals.len());
+    println!("Found {} total legal moves", legals.len());
     
-    // Filter moves to only those from the selected piece
+    // Debug output of all legal moves
+    for m in &legals {
+        if let Some(sq) = m.from() {
+            println!("Legal move from: {:?} to {:?}", sq, m.to());
+        } else {
+            println!("Special move (no source square) to {:?}", m.to());
+        }
+    }
+    
+    // Filter moves to only those from the selected piece's square
     let mut valid_move_count = 0;
     for chess_move in legals {
-        if chess_move.from() == Some(from_square) {
-            valid_move_count += 1;
-            let to_square = chess_move.to();
-            println!("Valid move: {:?} to {:?}", from_square, to_square);
-            
-            // Find the board square entity for the destination
-            for (transform, board_square) in board_squares.iter() {
-                if board_square.square == to_square {
-                    // Determine if this is a capture move
-                    let is_capture = game_state.board.board().piece_at(to_square).is_some();
-                    
-                    // Set up position for the indicator
-                    let position = Vec3::new(
-                        transform.translation.x,
-                        transform.translation.y,
-                        Z_LEGAL_MOVES // Use the proper z-index
-                    );
-                    
-                    if is_capture {
-                        // For captures, create a hollow circle (ring)
-                        // First create the outer circle
-                        commands.spawn((
-                            SpriteBundle {
-                                sprite: Sprite {
-                                    color: Color::rgba(0.9, 0.2, 0.2, 0.6), // Red ring
-                                    custom_size: Some(Vec2::new(TILE_SIZE * 0.7, TILE_SIZE * 0.7)),
-                                    ..default()
-                                },
-                                transform: Transform::from_translation(position),
-                                ..default()
-                            },
-                            ValidMoveDestination { chess_move: chess_move.clone() },
-                        ));
+        // Check if this move starts from our selected piece's square
+        if let Some(from) = chess_move.from() {
+            if from == from_square {
+                valid_move_count += 1;
+                let to_square = chess_move.to();
+                println!("Valid move: {:?} to {:?} for {:?} {:?}", 
+                         from_square, to_square, piece_color, piece_role);
+                
+                // Find the board square entity for the destination
+                for (transform, board_square) in board_squares.iter() {
+                    if board_square.square == to_square {
+                        // Determine if this is a capture move
+                        let is_capture = match game_state.board.board().piece_at(to_square) {
+                            Some(_) => true,
+                            None => false
+                        };
                         
-                        // Then add the inner circle to create the "hollow" effect
-                        commands.spawn((
-                            SpriteBundle {
-                                sprite: Sprite {
-                                    // Use the square color to create a "cut out" effect
-                                    color: if (board_square.square.file().char() as u8 - b'a' + 
-                                               board_square.square.rank().char() as u8 - b'1') % 2 == 0 {
-                                        Color::rgba(0.93, 0.79, 0.69, 1.0) // Light square
-                                    } else {
-                                        Color::rgba(0.46, 0.33, 0.28, 1.0) // Dark square
+                        // Set up position for the indicator
+                        let position = Vec3::new(
+                            transform.translation.x,
+                            transform.translation.y,
+                            Z_LEGAL_MOVES // Use the proper z-index
+                        );
+                        
+                        if is_capture {
+                            // For captures, create a hollow circle (ring)
+                            commands.spawn((
+                                SpriteBundle {
+                                    sprite: Sprite {
+                                        color: Color::rgba(0.9, 0.2, 0.2, 0.6), // Red for captures
+                                        custom_size: Some(Vec2::new(TILE_SIZE * 0.5, TILE_SIZE * 0.5)),
+                                        ..default()
                                     },
-                                    custom_size: Some(Vec2::new(TILE_SIZE * 0.4, TILE_SIZE * 0.4)),
+                                    transform: Transform::from_translation(position),
                                     ..default()
                                 },
-                                transform: Transform::from_translation(Vec3::new(
-                                    position.x,
-                                    position.y,
-                                    position.z + 0.01, // Slightly above the outer ring
-                                )),
-                                ..default()
-                            },
-                            ValidMoveDestination { chess_move: chess_move.clone() },
-                        ));
-                    } else {
-                        // For regular moves, create a solid green dot
-                        commands.spawn((
-                            SpriteBundle {
-                                sprite: Sprite {
-                                    color: Color::rgba(0.2, 0.8, 0.2, 0.7), // Green dot
-                                    custom_size: Some(Vec2::new(TILE_SIZE * 0.4, TILE_SIZE * 0.4)),
+                                ValidMoveDestination { chess_move: chess_move.clone() },
+                            ));
+                        } else {
+                            // For regular moves, create a solid circle
+                            commands.spawn((
+                                SpriteBundle {
+                                    sprite: Sprite {
+                                        color: Color::rgba(0.2, 0.8, 0.2, 0.5), // Green for regular moves
+                                        custom_size: Some(Vec2::new(TILE_SIZE * 0.3, TILE_SIZE * 0.3)),
+                                        ..default()
+                                    },
+                                    transform: Transform::from_translation(position),
                                     ..default()
                                 },
-                                transform: Transform::from_translation(position),
-                                ..default()
-                            },
-                            ValidMoveDestination { chess_move },
-                        ));
+                                ValidMoveDestination { chess_move },
+                            ));
+                        }
+                        
+                        break;
                     }
-                    
-                    break;
                 }
             }
         }
     }
-    println!("Displaying {} valid moves for selected piece", valid_move_count);
+    
+    println!("Displaying {} valid moves for selected piece at {:?}", valid_move_count, from_square);
+    if valid_move_count == 0 {
+        println!("WARNING: No valid moves found for selected piece at {:?}", from_square);
+    }
 }

@@ -36,8 +36,9 @@ fn init_game_state(
     drawback_registry: Res<DrawbackRegistry>,
     zobrist_keys: Res<crate::ai::zobrist::ZobristKeys>,
 ) {
-    // Parse the standard chess position FEN
-    let fen = Fen::from_ascii(FLIPPED_FEN.as_bytes()).expect("Valid FEN");
+    // Use the standard chess position FEN instead of the flipped one
+    // This matches the visual representation (white at bottom, black at top)
+    let fen = Fen::from_ascii(STANDARD_FEN.as_bytes()).expect("Valid FEN");
     let chess: Chess = fen.into_position(CastlingMode::Standard).expect("Valid position");
     
     // Initialize the GameState with default drawbacks from config
