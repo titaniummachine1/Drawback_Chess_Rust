@@ -28,23 +28,23 @@ const MAX_PHASE: f64 = 24.0;
 // Pawns
 const MG_PAWN_PST: [i32; 64] = [
     0,   0,   0,   0,   0,   0,   0,   0,
-   50,  50,  50,  50,  50,  50,  50,  50,
-   10,  10,  20,  35,  35,  20,  10,  10,
-   10,  15,  30,  70,  70,  30,  15,  10,
-    5,  10,  25,  55,  55,  25,  10,   5,
-    5,   5,   5,   0,   0,   5,   5,   5,
-    0,   0,   0, -30, -30,   0,   0,   0,
+   80,  80,  80,  80,  80,  80,  80,  80,
+   25,  25,  35,  45,  45,  35,  25,  25,
+   15,  15,  30,  70,  70,  30,  15,  15,
+   10,  10,  25,  55,  55,  25,  10,  10,
+    5,   5,  15,  25,  25,  15,   5,   5,
+    0,   0,   0, -10, -10,   0,   0,   0,
     0,   0,   0,   0,   0,   0,   0,   0
 ];
 
 // Knights
 const MG_KNIGHT_PST: [i32; 64] = [
     -80, -50,  -30,  -30,  -30,  -30, -50, -80,
-    -50, -20,    0,    0,    0,    0, -20, -50,
-    -30,   0,   15,   20,   20,   15,   0, -30,
-    -30,   5,   20,   25,   25,   20,   5, -30,
-    -30,   0,   15,   20,   20,   15,   0, -30,
-    -30,   5,   15,   15,   15,   15,   5, -30,
+    -50, -20,    0,    5,    5,    0, -20, -50,
+    -30,   5,   20,   30,   30,   20,   5, -30,
+    -30,  10,   30,   40,   40,   30,  10, -30,
+    -30,   5,   20,   30,   30,   20,   5, -30,
+    -30,   5,   15,   20,   20,   15,   5, -30,
     -50, -20,    0,    5,    5,    0, -20, -50,
     -80, -50,  -30,  -30,  -30,  -30, -50, -80
 ];
@@ -310,6 +310,8 @@ pub fn evaluate_position_with_pst(board: &Chess) -> i32 {
     // Get the side to move
     let side_to_move = board.turn();
     
+    println!("Evaluating position for side to move: {:?}", side_to_move);
+    
     // Evaluate pieces with position-dependent values
     for square in Square::ALL {
         if let Some(piece) = board.board().piece_at(square) {
@@ -325,6 +327,11 @@ pub fn evaluate_position_with_pst(board: &Chess) -> i32 {
             
             // Calculate base piece value interpolated between midgame and endgame
             let (mg_value, eg_value) = PIECE_VALUES[role_idx];
+            
+            // Increase the base values for material by 10% to value capturing more
+            let mg_value = (mg_value as f64 * 1.1) as i32;
+            let eg_value = (eg_value as f64 * 1.1) as i32;
+            
             let piece_value = (mg_value as f64 * (1.0 - endgame_phase) + 
                               eg_value as f64 * endgame_phase) as i32;
             
@@ -346,6 +353,11 @@ pub fn evaluate_position_with_pst(board: &Chess) -> i32 {
             }
         }
     }
+    
+    // Bonus for piece mobility and development
+    let legal_moves = board.legal_moves();
+    let mobility_bonus = (legal_moves.len() as i32) * 5; // 5 points per legal move
+    score += mobility_bonus; // Add mobility bonus
     
     score
 } 

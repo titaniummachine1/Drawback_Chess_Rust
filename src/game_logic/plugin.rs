@@ -43,8 +43,8 @@ fn init_game_state(
     let chess: Chess = fen.into_position(CastlingMode::Standard).expect("Valid position");
     
     // Initialize the GameState with default drawbacks from config
-    let white_drawback_id = config.resolve_drawback_id(&config.white_drawback);
-    let black_drawback_id = config.resolve_drawback_id(&config.black_drawback);
+    let white_drawback_id = config.resolve_drawback_id(&config.white_player.drawback);
+    let black_drawback_id = config.resolve_drawback_id(&config.black_player.drawback);
     
     println!("Initializing game with drawbacks - White: {:?}, Black: {:?}", 
              white_drawback_id, black_drawback_id);
@@ -75,4 +75,20 @@ pub fn is_king_capture(board: &Chess, game_move: &Move) -> bool {
         return piece.role == Role::King;
     }
     false
+}
+
+fn setup_drawbacks(
+    mut commands: Commands,
+    mut game_state: ResMut<GameState>,
+    config: Res<GameConfig>,
+) {
+    println!("Setting up drawbacks from configuration...");
+    
+    // Get drawback IDs from configuration
+    let white_drawback_id = config.resolve_drawback_id(&config.white_player.drawback);
+    let black_drawback_id = config.resolve_drawback_id(&config.black_player.drawback);
+    
+    // Set drawbacks in game state
+    game_state.white_drawback = white_drawback_id;
+    game_state.black_drawback = black_drawback_id;
 } 

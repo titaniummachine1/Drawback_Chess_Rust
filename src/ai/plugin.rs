@@ -16,6 +16,7 @@ pub struct AiPlugin;
 
 impl Plugin for AiPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(Startup, initialize_board_state);
         app.add_systems(Update,
             (
                 request_ai_move.run_if(in_state(TurnState::AiTurn)),
@@ -58,6 +59,19 @@ impl AiGameStateContext {
     }
 }
 
+fn is_current_player_ai(game_state: &GameState, config: &GameConfig) -> bool {
+    match game_state.current_player_turn {
+        ChessColor::White => config.white_player.is_ai,
+        ChessColor::Black => config.black_player.is_ai,
+    }
+}
+
+fn initialize_board_state(mut game_state: Option<ResMut<GameState>>) {
+    if let Some(mut state) = game_state {
+        state.board_flipped = DEFAULT_BOARD_FLIPPED;
+    }
+}
+
 /// System to spawn the AI calculation task
 fn request_ai_move(
     mut commands: Commands,
@@ -66,70 +80,63 @@ fn request_ai_move(
     drawback_registry: Res<DrawbackRegistry>,
     q_ai_task: Query<&AiThinking>,
 ) {
-    if q_ai_task.is_empty() {
-        println!("AI turn detected. Spawning calculation task...");
-
-        // Debug output - show legal moves
-        let legal_moves = game_state.board.legal_moves();
-        println!("AI found {} legal moves on current board", legal_moves.len());
-        
-        // Print out board state for debugging
-        println!("Current board state: {:?}", game_state.board);
-        println!("Current player turn: {:?}", game_state.current_player_turn);
-        
-        // If no legal moves, we should handle that gracefully
-        if legal_moves.is_empty() {
-            println!("WARNING: No legal moves available for AI - should check if game is over");
-            // We could handle this by transitioning to a different state
-            return;
-        }
-
-        let thread_pool = AsyncComputeTaskPool::get();
-
-        // Create a deep copy of the game state for AI to use
-        let game_state_copy = GameState {
-            board: game_state.board.clone(),
-            current_player_turn: game_state.current_player_turn,
-            status: game_state.status,
-            white_drawback: game_state.white_drawback,
-            black_drawback: game_state.black_drawback,
-            current_turn_rng_outcome: game_state.current_turn_rng_outcome,
-            zobrist_hash: game_state.zobrist_hash,
-            board_flipped: game_state.board_flipped,
-        };
-
-        // Determine current player and opponent drawback IDs
-        let (player_id, opponent_id) = match game_state_copy.current_player_turn {
-             ChessColor::White => (game_state_copy.white_drawback, game_state_copy.black_drawback),
-             ChessColor::Black => (game_state_copy.black_drawback, game_state_copy.white_drawback),
-        };
-
-        // Create DrawbackRule instances if needed for the current game state
-        // This helps the AI consider the effects of both players' drawbacks
-        let _player_drawback_arc = if player_id != DrawbackId::None {
-            Some(drawback_registry.rules.get(&player_id).cloned())
-        } else {
-            None
-        };
-
-        let _opponent_drawback_arc = if opponent_id != DrawbackId::None {
-            Some(drawback_registry.rules.get(&opponent_id).cloned())
-        } else {
-            None
-        };
-
-        // Prepare data for the async task - using the copy
-        let ai_context = AiGameStateContext::from_game_state(&game_state_copy, &config);
-        let iterations = config.ai_settings.iteration_limit;
-
-        // Spawn the Async Task
-        let task = thread_pool.spawn(async move {
-            find_best_move_mcts(ai_context, iterations)
-        });
-
-        commands.spawn(AiThinking(task));
-        println!("AI calculation task spawned.");
+    if !is_current_player_ai(&game_state, &config) {
+        return;
     }
+    
+    println!("AI turn detected. Spawning calculation task...");
+    
+    // Debug output - show legal moves
+    let legal_moves = game_state.board.legal_moves();
+    println!("AI found {} legal moves on current board", legal_moves.len());
+    println!("Current board state: {:?}", game_state.board);
+    println!("Current player turn: {:?}", game_state.current_player_turn);
+    
+    if legal_moves.is_empty() {
+        println!("WARNING: No legal moves available for AI - should check if game is over");
+        return;
+    }
+
+    let thread_pool = AsyncComputeTaskPool::get();
+
+    // Create a deep copy of the game state for AI to use
+    let game_state_copy = GameState {
+        board: game_state.board.clone(),
+        current_player_turn: game_state.current_player_turn,
+        status: game_state.status,
+        white_drawback: game_state.white_drawback,
+        black_drawback: game_state.black_drawback,
+        current_turn_rng_outcome: game_state.current_turn_rng_outcome,
+        zobrist_hash: game_state.zobrist_hash,
+        board_flipped: game_state.board_flipped,
+    };
+
+    let (player_id, opponent_id) = match game_state_copy.current_player_turn {
+         ChessColor::White => (game_state_copy.white_drawback, game_state_copy.black_drawback),
+         ChessColor::Black => (game_state_copy.black_drawback, game_state_copy.white_drawback),
+    };
+
+    let _player_drawback_arc = if player_id != DrawbackId::None {
+        Some(drawback_registry.rules.get(&player_id).cloned())
+    } else {
+        None
+    };
+
+    let _opponent_drawback_arc = if opponent_id != DrawbackId::None {
+        Some(drawback_registry.rules.get(&opponent_id).cloned())
+    } else {
+        None
+    };
+
+    let ai_context = AiGameStateContext::from_game_state(&game_state_copy, &config);
+    let iterations = config.ai_settings.iteration_limit;
+
+    let task = thread_pool.spawn(async move {
+        find_best_move_mcts(ai_context, iterations)
+    });
+
+    commands.spawn(AiThinking(task));
+    println!("AI calculation task spawned.");
 }
 
 /// System to check the AiThinking task result
@@ -144,33 +151,27 @@ fn check_ai_move_result(
         if let Some(result_move) = future::block_on(future::poll_once(&mut ai_task.0)) {
             println!("AI calculation task finished.");
             if let Some(ai_move) = result_move {
-                // Validate the move before sending it
                 let is_valid = validate_ai_move(&game_state, &ai_move);
-                
                 if is_valid {
                     println!("AI requests move: {:?}", ai_move);
                     ev_make_move.send(MakeMoveEvent(ai_move));
                 } else {
                     eprintln!("AI requested invalid move: {:?}, ignoring it", ai_move);
-                    // Get a fallback move from legal moves if the AI's choice is invalid
                     if let Some(fallback_move) = get_fallback_move(&game_state) {
                         println!("Using fallback move instead: {:?}", fallback_move);
                         ev_make_move.send(MakeMoveEvent(fallback_move));
                     } else {
                         eprintln!("No valid moves available. Game might be in a terminal state.");
-                        // Change state to player's turn if AI can't move
                         next_state.set(TurnState::PlayerTurn);
                     }
                 }
             } else {
                 eprintln!("AI task finished but returned no move. Game state might be terminal.");
-                
-                // Check if there are actually no legal moves
                 let legal_moves = game_state.board.legal_moves();
                 if legal_moves.is_empty() {
-                    eprintln!("No legal moves available. Setting state to player's turn.");
-                    // Change state to player's turn if AI can't move
-                    next_state.set(TurnState::PlayerTurn);
+                    eprintln!("No legal moves available. Game over detected. Restarting the game.");
+                    next_state.set(TurnState::GameOver);
+                    return;
                 } else if let Some(fallback_move) = get_fallback_move(&game_state) {
                     println!("Using fallback random move as AI couldn't decide: {:?}", fallback_move);
                     ev_make_move.send(MakeMoveEvent(fallback_move));
@@ -185,9 +186,12 @@ fn check_ai_move_result(
 
 /// Validate that an AI move is valid for the current game state
 fn validate_ai_move(game_state: &GameState, proposed_move: &Move) -> bool {
-    // Simply check if the move is in the current list of legal moves
     let legal_moves = game_state.board.legal_moves();
-    legal_moves.contains(proposed_move)
+    if !legal_moves.contains(proposed_move) {
+         eprintln!("Invalid move from AI: {:?}. Legal moves: {:?}", proposed_move, legal_moves);
+         return false;
+    }
+    true
 }
 
 /// Select a random fallback move from legal moves

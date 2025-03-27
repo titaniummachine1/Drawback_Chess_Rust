@@ -47,7 +47,7 @@ pub fn find_best_move_mcts(ctx: AiGameStateContext, iterations: u32) -> Option<M
         test_board.play_unchecked(m);
         
         // Calculate a score for this move
-        let mut score = capture_value;
+        let mut score = capture_value * 3; // Significantly increase the value of captures
         
         // Heavily prioritize capturing the king (immediate win in Drawback Chess)
         if capturing_king {
@@ -58,6 +58,8 @@ pub fn find_best_move_mcts(ctx: AiGameStateContext, iterations: u32) -> Option<M
         // To do this, we need to check all opponent responses
         let opponent_responses = test_board.legal_moves();
         let mut opponent_can_capture_king = false;
+        let mut our_pieces_at_risk = 0;
+        let mut max_piece_value_at_risk = 0;
         
         for opp_move in opponent_responses.iter() {
             if is_king_capture(&test_board, opp_move) {
@@ -65,10 +67,22 @@ pub fn find_best_move_mcts(ctx: AiGameStateContext, iterations: u32) -> Option<M
                 opponent_can_capture_king = true;
                 break;
             }
+            
+            // Check if opponent can capture any of our pieces
+            let piece_value = get_capture_value(&test_board, opp_move);
+            if piece_value > 0 {
+                our_pieces_at_risk += 1;
+                max_piece_value_at_risk = max_piece_value_at_risk.max(piece_value);
+            }
         }
         
         if opponent_can_capture_king {
             score -= 15000; // Strongly avoid moves that allow opponent to capture our king
+        }
+        
+        // Avoid hanging pieces - Penalize moves that leave our pieces undefended
+        if our_pieces_at_risk > 0 {
+            score -= max_piece_value_at_risk * 2;
         }
         
         // Prefer moves that put opponent in check
@@ -78,16 +92,16 @@ pub fn find_best_move_mcts(ctx: AiGameStateContext, iterations: u32) -> Option<M
             let possible_responses = opponent_legal_moves.len();
             
             // The fewer responses, the better for us
-            score += 50 + (20 * (20 - possible_responses as i32)).max(0); 
+            score += 70 + (30 * (20 - possible_responses as i32)).max(0); 
         }
         
         // If we're in check, prioritize moves that get us out
         if in_check {
-            score += 300; // Bonus for any legal move when in check
+            score += 500; // Higher bonus for escaping check
         }
         
         // Add evaluation using piece-square tables
-        let pst_score = evaluate_position_with_pst(&test_board);
+        let pst_score = -evaluate_position_with_pst(&test_board);
         println!("Move {:?} - PST evaluation: {}", m, pst_score);
         score += pst_score;
         
@@ -147,11 +161,11 @@ fn is_king_capture(board: &Chess, m: &Move) -> bool {
 
 /// Helper function to get the value of a captured piece
 fn get_capture_value(board: &Chess, m: &Move) -> i32 {
-    const PAWN_VALUE: i32 = 100;
-    const KNIGHT_VALUE: i32 = 320;
-    const BISHOP_VALUE: i32 = 330;
-    const ROOK_VALUE: i32 = 500;
-    const QUEEN_VALUE: i32 = 900;
+    const PAWN_VALUE: i32 = 120;
+    const KNIGHT_VALUE: i32 = 370;
+    const BISHOP_VALUE: i32 = 380;
+    const ROOK_VALUE: i32 = 550;
+    const QUEEN_VALUE: i32 = 1000;
     const KING_VALUE: i32 = 20000; // Very high value for king capture in Drawback Chess
     
     // Direct capture - destination has a piece
