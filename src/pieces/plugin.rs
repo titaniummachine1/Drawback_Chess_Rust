@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use shakmaty::{Color as ChessColor, Role, Square, Position, Move};
-use crate::constants::TILE_SIZE;
+use crate::constants::{TILE_SIZE, Z_PIECES, Z_UI_ELEMENTS};
 use crate::game_logic::state::{GameState, TurnState};
 use crate::game_logic::events::MakeMoveEvent;
 use super::components::Piece;
@@ -351,7 +351,7 @@ fn spawn_promotion_ui(
     let base_position = Vec3::new(
         (file as f32 - 3.5) * TILE_SIZE,
         ((7 - rank) as f32 - 3.5) * TILE_SIZE,
-        0.5 // Above pieces (increased z-value for better visibility)
+        Z_UI_ELEMENTS // Above pieces and indicators
     );
     
     // Spawn parent entity for all promotion options
@@ -392,8 +392,8 @@ fn spawn_promotion_ui(
             // First spawn a background highlight
             parent.spawn(SpriteBundle {
                 sprite: Sprite {
-                    color: Color::rgba(1.0, 1.0, 0.0, 0.5), // Yellow semi-transparent
-                    custom_size: Some(Vec2::new(TILE_SIZE * 1.1, TILE_SIZE * 1.1)),
+                    color: Color::rgba(1.0, 1.0, 0.0, 0.7), // More opaque yellow
+                    custom_size: Some(Vec2::new(TILE_SIZE * 1.2, TILE_SIZE * 1.2)), // Even larger background
                     ..default()
                 },
                 transform: Transform::from_translation(position),
@@ -404,7 +404,11 @@ fn spawn_promotion_ui(
             parent.spawn((
                 SpriteBundle {
                     texture: asset_server.load(&image_path),
-                    transform: Transform::from_translation(position),
+                    transform: Transform::from_translation(Vec3::new(
+                        position.x, 
+                        position.y, 
+                        position.z + 0.01 // Slightly above background
+                    )),
                     sprite: Sprite {
                         custom_size: Some(Vec2::new(TILE_SIZE * 1.0, TILE_SIZE * 1.0)),
                         ..default()
@@ -461,7 +465,7 @@ pub fn spawn_pieces(
             let position = Vec3::new(
                 (file as f32 - 3.5) * TILE_SIZE, // Center the board horizontally
                 ((7 - rank) as f32 - 3.5) * TILE_SIZE, // Flip the rank to get 0 at the bottom
-                0.1, // Place slightly above board and highlights
+                Z_PIECES, // Place pieces above the board and indicators
             );
 
             println!("Placing piece at square: {:?}, position: {:?}", square, position);
@@ -521,7 +525,7 @@ fn spawn_single_piece(
     let position = Vec3::new(
         (file as f32 - 3.5) * TILE_SIZE,
         ((7 - rank) as f32 - 3.5) * TILE_SIZE,
-        0.1
+        Z_PIECES // Update to use constant
     );
     
     // Determine piece image path
