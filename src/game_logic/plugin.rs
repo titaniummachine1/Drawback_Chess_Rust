@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use shakmaty::{fen::Fen, Chess, Color, CastlingMode, Position, Setup};
+use shakmaty::{fen::Fen, Chess, Color, Role, Move, CastlingMode, Position, Setup};
 use crate::drawbacks::DrawbackId;
 use crate::config::GameConfig;
 use crate::drawbacks::registry::DrawbackRegistry;
@@ -34,6 +34,7 @@ fn init_game_state(
     mut commands: Commands,
     config: Res<GameConfig>,
     drawback_registry: Res<DrawbackRegistry>,
+    zobrist_keys: Res<crate::ai::zobrist::ZobristKeys>,
 ) {
     // Parse the standard chess position FEN
     let fen = Fen::from_ascii(FLIPPED_FEN.as_bytes()).expect("Valid FEN");
@@ -58,7 +59,7 @@ fn init_game_state(
     };
 
     // Update the zobrist hash with the initial position
-    let hash = crate::ai::zobrist::calculate_zobrist_hash(&game_state.board);
+    let hash = crate::ai::zobrist::calculate_zobrist_hash_for_board(&game_state.board, &zobrist_keys);
     game_state.zobrist_hash = hash;
     
     // Insert the initialized GameState as a resource

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use shakmaty::{Square, Color as ChessColor, Role, Position, CastlingSide, EnPassantMode};
+use shakmaty::{Chess, Square, Color as ChessColor, Role, Position, CastlingSide, EnPassantMode};
 use crate::game_logic::state::GameState;
 use crate::game_logic::systems::apply_move;
 use rand::{Rng, SeedableRng};
@@ -184,6 +184,53 @@ pub fn calculate_zobrist_hash(game_state: &GameState, keys: &ZobristKeys) -> u64
     if let Some(outcome) = game_state.current_turn_rng_outcome {
         let outcome_idx = outcome as usize % (MAX_RNG_OUTCOMES + 1);
         hash ^= keys.rng_outcomes[outcome_idx];
+    }
+    
+    hash
+}
+
+/// Calculate Zobrist hash just for a chess board (simplified version)
+pub fn calculate_zobrist_hash_for_board(board: &Chess, keys: &ZobristKeys) -> u64 {
+    let mut hash: u64 = 0;
+    let board_pieces = board.board();
+
+    // 1. Pieces
+    for square in Square::ALL {
+        if let Some(piece) = board_pieces.piece_at(square) {
+            let piece_idx = piece_to_index(piece.role, piece.color);
+            let square_idx = square_to_index(square);
+            hash ^= keys.pieces[piece_idx][square_idx];
+        }
+    }
+    
+    // 2. Side to move
+    if board.turn() == ChessColor::Black {
+        hash ^= keys.turn;
+    }
+    
+    // 3. Castling rights
+    let castles = board.castles();
+    
+    if castles.has(ChessColor::White, CastlingSide::KingSide) {
+        hash ^= keys.castling[0];
+    }
+    
+    if castles.has(ChessColor::White, CastlingSide::QueenSide) {
+        hash ^= keys.castling[1]; 
+    }
+    
+    if castles.has(ChessColor::Black, CastlingSide::KingSide) {
+        hash ^= keys.castling[2];
+    }
+    
+    if castles.has(ChessColor::Black, CastlingSide::QueenSide) {
+        hash ^= keys.castling[3];
+    }
+    
+    // 4. En passant square
+    if let Some(ep_square) = board.ep_square(EnPassantMode::Legal) {
+        let file_idx = ep_square.file().char() as usize - 'a' as usize;
+        hash ^= keys.en_passant[file_idx];
     }
     
     hash
