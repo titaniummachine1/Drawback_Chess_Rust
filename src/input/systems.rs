@@ -5,7 +5,7 @@ use crate::game_logic::state::{GameState, TurnState};
 use crate::board::components::BoardSquare;
 use crate::pieces::components::Piece;
 use crate::constants::{SELECTED_COLOR, LEGAL_MOVE_COLOR, TILE_SIZE, Z_LEGAL_MOVES, Z_HIGHLIGHT, Z_PIECES};
-use shakmaty::{Move, Square, Role, Position, Color as ChessColor};
+use shakmaty::{Move, Square, Role, Position, Color as ChessColor, File, Rank};
 
 // Component to mark the currently selected piece
 #[derive(Component)]
@@ -82,6 +82,38 @@ pub fn handle_piece_selection(
             
             for (entity, piece, _) in pieces.iter() {
                 if piece.pos == square && piece.color == game_state.current_player_turn {
+                    // For rooks, make sure this isn't a castling situation
+                    // This prevents the bug where clicking on a rook allows diagonal capture
+                    if piece.role == Role::Rook {
+                        // Check if king is in initial position
+                        let king_rank = if piece.color == ChessColor::White { Rank::First } else { Rank::Eighth };
+                        let king_file = File::E;
+                        let king_square = Square::from_coords(king_file, king_rank);
+                        
+                        // Look for king at starting position
+                        let mut king_found = false;
+                        for (_, king_piece, _) in pieces.iter() {
+                            if king_piece.role == Role::King && 
+                               king_piece.color == piece.color &&
+                               king_piece.pos == king_square {
+                                king_found = true;
+                                break;
+                            }
+                        }
+                        
+                        // If king is in castling position, don't allow selecting the rook directly
+                        // This forces player to select king and then castling destination square
+                        if king_found {
+                            // Check if this rook is on initial square (a1/a8 or h1/h8)
+                            let rook_file = piece.pos.file();
+                            if (rook_file == File::A || rook_file == File::H) && 
+                               piece.pos.rank() == king_rank {
+                                println!("Preventing direct rook selection for castling. Select king instead.");
+                                return;
+                            }
+                        }
+                    }
+                    
                     println!("Selected piece: {:?} {:?} at {:?}", piece.color, piece.role, piece.pos);
                     
                     // Mark this piece as selected

@@ -87,14 +87,14 @@ const MG_QUEEN_PST: [i32; 64] = [
 
 // Kings
 const MG_KING_PST: [i32; 64] = [
-    -120, -120, -120, -120, -120, -120, -120, -120,
-    -100, -100, -100, -100, -100, -100, -100, -100,
-    -80, -80, -80, -80, -80, -80, -80, -80,
-    -70, -70, -70, -70, -70, -70, -70, -70,
-    -60, -60, -60, -60, -60, -60, -60, -60,
     -40, -40, -40, -40, -40, -40, -40, -40,
-      0,   0, -10, -30, -30, -10,   0,   0,
-     20,  50,  10,   0,   0,  10,  50,  20
+    -30, -30, -30, -30, -30, -30, -30, -30,
+    -25, -25, -25, -25, -25, -25, -25, -25,
+    -20, -20, -20, -20, -20, -20, -20, -20,
+    -15, -15, -15, -15, -15, -15, -15, -15,
+    -10, -10, -15, -15, -15, -15, -10, -10,
+      0,   0, -10, -15, -15, -10,   0,   0,
+     20,  40,  10,   0,   0,  10,  40,  20
 ];
 
 // Piece-square tables - endgame for white perspective
@@ -201,7 +201,8 @@ impl PieceSquareTables {
         white_eg.insert(Role::Queen, EG_QUEEN_PST);
         white_eg.insert(Role::King, EG_KING_PST);
 
-        // Calculate black tables by mirroring and negating
+        // Calculate black tables by mirroring values vertically
+        // Black wants the same positional objectives as white but from the other side
         for role in [Role::Pawn, Role::Knight, Role::Bishop, Role::Rook, Role::Queen, Role::King] {
             let white_mg_table = white_mg.get(&role).unwrap();
             let white_eg_table = white_eg.get(&role).unwrap();
@@ -213,13 +214,13 @@ impl PieceSquareTables {
                 let rank = sq / 8;
                 let file = sq % 8;
                 
-                // Mirror square vertically
+                // Mirror square vertically - black's 7th rank is like white's 2nd rank
                 let mirror_rank = 7 - rank;
                 let mirror_sq = mirror_rank * 8 + file;
                 
-                // Negate the values for black
-                black_mg_table[sq] = -white_mg_table[mirror_sq];
-                black_eg_table[sq] = -white_eg_table[mirror_sq];
+                // Black pieces should get the SAME bonus as white would on the mirrored square
+                black_mg_table[sq] = white_mg_table[mirror_sq];
+                black_eg_table[sq] = white_eg_table[mirror_sq];
             }
             
             black_mg.insert(role, black_mg_table);
@@ -344,7 +345,7 @@ pub fn evaluate_position_with_pst(board: &Chess) -> i32 {
                         piece.color, piece.role, square, piece_value, position_value);
             }
             
-            // Add to score: positive for side to move, negative for opponent
+            // Apply the score correctly based on piece color
             let value = piece_value + position_value;
             if piece.color == side_to_move {
                 score += value;

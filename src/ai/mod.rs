@@ -3,8 +3,9 @@ pub mod plugin;
 pub mod mcts;
 pub mod zobrist;
 pub mod evaluation;
+pub mod pleco_ai;
 
 pub use plugin::AiPlugin;
-pub use zobrist::{ZobristKeys, ZobristPlugin};
+pub use zobrist::{ZobristPlugin};
 
  

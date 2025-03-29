@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 use shakmaty::{Chess, Square, Color as ChessColor, Role, Position, CastlingSide, EnPassantMode};
 use crate::game_logic::state::GameState;
-use crate::game_logic::systems::apply_move;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 
@@ -39,7 +38,7 @@ impl Plugin for ZobristPlugin {
         // Initialize the Zobrist keys
         let zobrist_keys = initialize_zobrist_keys();
         app.insert_resource(zobrist_keys)
-           .add_systems(Update, calculate_and_update_zobrist_hash.after(apply_move));
+           .add_systems(Update, calculate_and_update_zobrist_hash);
     }
 }
 

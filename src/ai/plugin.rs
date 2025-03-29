@@ -1,28 +1,28 @@
 use bevy::prelude::*;
 use bevy::tasks::AsyncComputeTaskPool;
 use futures_lite::future;
-use std::time::Duration;
 use shakmaty::{Chess, Color as ChessColor, Move, Position};
 use crate::game_logic::state::{GameState, TurnState};
 use crate::game_logic::events::MakeMoveEvent;
-use crate::drawbacks::{DrawbackRegistry, DrawbackId};
+use crate::drawbacks::{DrawbackRegistry, DrawbackId, definition::DrawbackRule};
 use crate::config::GameConfig;
 use crate::constants::DEFAULT_BOARD_FLIPPED;
 use super::components::AiThinking;
-use super::mcts::find_best_move_mcts;
+use super::pleco_ai::find_best_move_pleco;
 use rand::Rng;
+use std::sync::Arc;
 
 pub struct AiPlugin;
 
 impl Plugin for AiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, initialize_board_state);
-        app.add_systems(Update,
-            (
-                request_ai_move.run_if(in_state(TurnState::AiTurn)),
-                check_ai_move_result.run_if(in_state(TurnState::AiTurn)),
-            )
-        );
+        app
+            // Set up default configuration - use max_power_ai preset
+            .insert_resource(crate::config::presets::max_power_ai())
+            // Add systems
+            .add_systems(Startup, initialize_board_state)
+            .add_systems(Update, request_ai_move)
+            .add_systems(Update, check_ai_move_result);
     }
 }
 
@@ -66,7 +66,7 @@ fn is_current_player_ai(game_state: &GameState, config: &GameConfig) -> bool {
     }
 }
 
-fn initialize_board_state(mut game_state: Option<ResMut<GameState>>) {
+fn initialize_board_state(game_state: Option<ResMut<GameState>>) {
     if let Some(mut state) = game_state {
         state.board_flipped = DEFAULT_BOARD_FLIPPED;
     }
@@ -77,13 +77,19 @@ fn request_ai_move(
     mut commands: Commands,
     game_state: Res<GameState>,
     config: Res<GameConfig>,
-    drawback_registry: Res<DrawbackRegistry>,
+    _drawback_registry: Res<DrawbackRegistry>,
     q_ai_task: Query<&AiThinking>,
 ) {
+    // Check if it's the AI's turn based on the current player color and config
     if !is_current_player_ai(&game_state, &config) {
         return;
     }
     
+    // Check if an AI task is already running
+    if !q_ai_task.is_empty() {
+        return;
+    }
+
     println!("AI turn detected. Spawning calculation task...");
     
     // Debug output - show legal moves
@@ -92,18 +98,19 @@ fn request_ai_move(
     println!("Current board state: {:?}", game_state.board);
     println!("Current player turn: {:?}", game_state.current_player_turn);
     
+    // If no legal moves, trigger game over
     if legal_moves.is_empty() {
         println!("WARNING: No legal moves available for AI - should check if game is over");
         return;
     }
-
+    
     let thread_pool = AsyncComputeTaskPool::get();
 
     // Create a deep copy of the game state for AI to use
     let game_state_copy = GameState {
         board: game_state.board.clone(),
         current_player_turn: game_state.current_player_turn,
-        status: game_state.status,
+        status: game_state.status.clone(),
         white_drawback: game_state.white_drawback,
         black_drawback: game_state.black_drawback,
         current_turn_rng_outcome: game_state.current_turn_rng_outcome,
@@ -116,14 +123,16 @@ fn request_ai_move(
          ChessColor::Black => (game_state_copy.black_drawback, game_state_copy.white_drawback),
     };
 
-    let _player_drawback_arc = if player_id != DrawbackId::None {
-        Some(drawback_registry.rules.get(&player_id).cloned())
+    let _player_drawback_arc: Option<Arc<dyn DrawbackRule>> = if player_id != DrawbackId::None {
+        // Some(drawback_registry.rules.get(&player_id).cloned())
+        None
     } else {
         None
     };
 
-    let _opponent_drawback_arc = if opponent_id != DrawbackId::None {
-        Some(drawback_registry.rules.get(&opponent_id).cloned())
+    let _opponent_drawback_arc: Option<Arc<dyn DrawbackRule>> = if opponent_id != DrawbackId::None {
+        // Some(drawback_registry.rules.get(&opponent_id).cloned())
+        None
     } else {
         None
     };
@@ -132,7 +141,7 @@ fn request_ai_move(
     let iterations = config.ai_settings.iteration_limit;
 
     let task = thread_pool.spawn(async move {
-        find_best_move_mcts(ai_context, iterations)
+        find_best_move_pleco(ai_context, iterations)
     });
 
     commands.spawn(AiThinking(task));

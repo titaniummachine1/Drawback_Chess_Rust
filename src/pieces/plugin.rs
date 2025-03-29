@@ -341,21 +341,15 @@ pub fn update_piece_positions(
                     Square::from_coords(File::A, king_rank)
                 };
                 
-                // Calculate the rook's destination square
+                // Calculate the rook's destination square correctly
+                // For kingside castle: king goes to g1/g8, rook goes to f1/f8
+                // For queenside castle: king goes to c1/c8, rook goes to d1/d8
                 let rook_to = if is_kingside_castle {
-                    // For kingside castle, rook moves to king's left
-                    let file_char = (chess_move.to().file().char() as u8 - 1) as char;
-                    Square::from_coords(
-                        File::from_char(file_char).unwrap(),
-                        king_rank
-                    )
+                    // For kingside castle, rook moves to F file (king is on G)
+                    Square::from_coords(File::F, king_rank)
                 } else {
-                    // For queenside castle, rook moves to king's right
-                    let file_char = (chess_move.to().file().char() as u8 + 1) as char;
-                    Square::from_coords(
-                        File::from_char(file_char).unwrap(),
-                        king_rank
-                    )
+                    // For queenside castle, rook moves to D file (king is on C)
+                    Square::from_coords(File::D, king_rank)
                 };
                 
                 // Update the rook

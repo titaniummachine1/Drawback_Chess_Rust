@@ -28,11 +28,11 @@ const BLACK_DRAWBACK_INDEX: Option<u16> = None;
 // AI SETTINGS
 // -----------
 // More iterations and deeper search = stronger but slower AI
-const AI_ITERATION_LIMIT: u32 = 2000000; // Doubled
-const AI_TIME_LIMIT_MS: u32 = 3000;     // Ensure it always takes 3 seconds
-const AI_DEPTH_LIMIT: u8 = 20;          // Deeper search
+const AI_ITERATION_LIMIT: u32 = 10000000; // Max iterations
+const AI_TIME_LIMIT_MS: u32 = 3000;      // Always take 3 seconds
+const AI_DEPTH_LIMIT: u8 = 24;           // Deep search
 const AI_CHECK_QUIETNESS: bool = true;  
-const AI_QUIESCENCE_DEPTH: u8 = 16;     
+const AI_QUIESCENCE_DEPTH: u8 = 20;     
 
 //==============================================================================
 // DRAWBACK LIST
@@ -136,7 +136,7 @@ pub mod presets {
             },
             ai_settings: AiSettings {
                 iteration_limit: 1000000,
-                time_limit_ms: 4000,
+                time_limit_ms: 3000,
                 depth_limit: 18,
                 check_quietness: true,
                 quiescence_depth: 16,
@@ -163,10 +163,37 @@ pub mod presets {
             },
             ai_settings: AiSettings {
                 iteration_limit: 1000000,
-                time_limit_ms: 4000,
+                time_limit_ms: 3000,
                 depth_limit: 18,
                 check_quietness: true,
                 quiescence_depth: 16,
+            },
+        }
+    }
+    
+    // Maximum AI Power (For best gameplay)
+    pub fn max_power_ai() -> GameConfig {
+        GameConfig {
+            white_player: PlayerSettings {
+                is_ai: true,  // Changed to true so both AIs can play against each other
+                drawback: DrawbackSetting {
+                    name: None,
+                    index: None,
+                },
+            },
+            black_player: PlayerSettings {
+                is_ai: true,
+                drawback: DrawbackSetting {
+                    name: None,
+                    index: None,
+                },
+            },
+            ai_settings: AiSettings {
+                iteration_limit: 10000000,  // Very high iterations
+                time_limit_ms: 3000,       // Fixed 3 second time
+                depth_limit: 24,           // Deep search
+                check_quietness: true,
+                quiescence_depth: 20,
             },
         }
     }
