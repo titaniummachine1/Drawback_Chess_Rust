@@ -11,6 +11,7 @@ use super::components::AiThinking;
 use super::pleco_ai::find_best_move_pleco;
 use rand::Rng;
 use std::sync::Arc;
+use std::time::Duration;
 
 pub struct AiPlugin;
 
@@ -140,8 +141,19 @@ fn request_ai_move(
     let ai_context = AiGameStateContext::from_game_state(&game_state_copy, &config);
     let iterations = config.ai_settings.iteration_limit;
 
+    let time_limit = Duration::from_millis(1000);
+    let depth = ai_context.depth as u16;
+
+    debug!("AI starting calculation: time_limit={:?}, depth={}", time_limit, depth);
+    let start_time = std::time::Instant::now();
+
     let task = thread_pool.spawn(async move {
-        find_best_move_pleco(ai_context, iterations)
+        let result = find_best_move_pleco(ai_context, time_limit, depth);
+        
+        let elapsed = start_time.elapsed();
+        debug!("AI finished calculation in {:?}", elapsed);
+        
+        result
     });
 
     commands.spawn(AiThinking(task));

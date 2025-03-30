@@ -31,7 +31,7 @@ pub const Z_UI_ELEMENTS: f32 = 0.4; // UI elements like promotion options
 pub const Z_DRAGGING: f32 = 0.5;   // Pieces while being dragged
 
 // Default board orientation - white at bottom (false)
-pub const DEFAULT_BOARD_FLIPPED: bool = false;
+pub const DEFAULT_BOARD_FLIPPED: bool = true;
 
 // These colors are defined for potential future use
 // pub const ACTIVE_COLOR: Color = Color::rgba(0.0, 1.0, 0.0, 0.7);
